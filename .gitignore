@@ -1,0 +1,49 @@
+# Python virtual environment
+venv/
+.env/
+
+# Environment variables
+.env
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+
+# VS Code
+.vscode/
+
+# PyCharm
+.idea/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# SQLite databases (if you use them)
+*.sqlite3
+*.db
+
+# Logs
+*.log
+
+# Build / distribution
+build/
+dist/
+*.egg-info/
+
+# pytest
+.pytest_cache/
+
+# mypy
+.mypy_cache/
+
+# Coverage reports
+.coverage
+htmlcov/
+
+# Node modules (for future React frontend)
+frontend/node_modules/
+
+# Vite build output (for future React frontend)
+frontend/dist/
