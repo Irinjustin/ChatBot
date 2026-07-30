@@ -7,7 +7,9 @@ from sqlalchemy.orm import Session
 import crud
 import gemini_service
 from database import get_db
+from dependencies import get_current_user
 from logger import logger
+from models import User
 from schemas import (
     ChatRequest,
     ConversationResponse,
@@ -23,10 +25,15 @@ router = APIRouter(tags=["Chat"])
     response_model=ConversationResponse
 )
 def create_conversation(
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ):
     try:
-        conversation = crud.create_new_conversation(db)
+
+        conversation = crud.create_new_conversation(
+            db,
+            current_user.id
+        )
 
         logger.info(
             f"Conversation created: {conversation.session_id}"
@@ -49,20 +56,25 @@ def create_conversation(
 @router.post("/chat")
 def chat(
     data: ChatRequest,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ):
 
     try:
 
+        # Check whether conversation already exists
         conversation = crud.get_conversation_by_session(
             db,
             data.session_id
         )
 
+        # Create only if it doesn't exist
         if conversation is None:
+
             conversation = crud.create_conversation(
                 db,
-                data.session_id
+                data.session_id,
+                current_user.id
             )
 
             logger.info(
@@ -154,14 +166,18 @@ def chat(
     response_model=List[ConversationSchema]
 )
 def get_conversations(
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ):
 
     try:
 
         logger.info("Fetching all conversations")
 
-        return crud.get_all_conversations(db)
+        return crud.get_all_conversations(
+            db,
+            current_user.id
+        )
 
     except Exception as e:
 
@@ -179,7 +195,8 @@ def get_conversations(
 )
 def get_messages(
     session_id: str,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ):
 
     try:
@@ -211,7 +228,8 @@ def get_messages(
 @router.delete("/conversation/{session_id}")
 def delete_conversation(
     session_id: str,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ):
 
     try:

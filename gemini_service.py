@@ -38,58 +38,44 @@ def build_contents(messages):
     for message in messages:
 
         contents.append(
-
             types.Content(
-
                 role=message.role,
-
                 parts=[
                     types.Part(
                         text=message.content
                     )
                 ]
             )
-
         )
 
     return contents
 
 
-def generate_response(messages, user_message):
+def generate_response(
+    messages,
+    user_message,
+    system_prompt=SYSTEM_PROMPT,
+    model_name="gemini-flash-latest"
+):
 
-    contents = build_contents(messages)
-
-    contents.append(
-        types.Content(
-            role="user",
-            parts=[
-                types.Part(text=user_message)
-            ]
-        )
-    )
+    contents = user_message
 
     try:
-
         logger.info("Sending request to Gemini")
-
-        stream = client.models.generate_content_stream(
-            model="gemini-3.5-flash",
+        logger.info(f"Using model: {model_name}")
+        logger.info(f"Contents: {contents}")
+        response = client.models.generate_content(
+            model=model_name,
             contents=contents,
             config=types.GenerateContentConfig(
-                system_instruction=SYSTEM_PROMPT
+                system_instruction=system_prompt
             )
         )
 
-        for chunk in stream:
-            if chunk.text:
-                yield chunk.text
+        yield response.text
 
-        logger.info("Gemini response streamed successfully")
+        logger.info("Gemini response generated successfully")
 
     except Exception as e:
-
         logger.error(f"Gemini Error: {e}")
-
-        raise RuntimeError(
-            f"Gemini Error: {str(e)}"
-        )
+        raise RuntimeError(f"Gemini Error: {str(e)}")
