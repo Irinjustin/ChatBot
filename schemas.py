@@ -74,6 +74,21 @@ class ChatResponse(BaseModel):
     reply: str
 
 
+# ---------- Widget ----------
+
+class WidgetConversationRequest(BaseModel):
+    agent_id: int
+
+
+class WidgetChatRequest(BaseModel):
+    session_id: str
+    message: str = Field(
+        min_length=1,
+        max_length=4000
+    )
+
+
+
 class ConversationResponse(BaseModel):
     session_id: str
 

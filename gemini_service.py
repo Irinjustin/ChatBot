@@ -12,22 +12,14 @@ client = genai.Client(
 )
 
 SYSTEM_PROMPT = """
-You are StreamFlix AI Assistant.
+You are an AI website assistant.
 
-Your job is to help users with:
+Answer questions using the provided website context.
 
-- Movie recommendations
-- TV shows
-- Genres
-- Actors
-- StreamFlix related questions
+If the answer is not available in the website context,
+politely tell the user that the information could not be found.
 
-Be friendly.
-
-Keep answers short.
-
-If the user asks something unrelated to movies or StreamFlix,
-politely answer but remind them that you specialize in StreamFlix.
+Be clear, concise and helpful.
 """
 
 
@@ -52,30 +44,44 @@ def build_contents(messages):
 
 
 def generate_response(
-    messages,
     user_message,
     system_prompt=SYSTEM_PROMPT,
-    model_name="gemini-flash-latest"
+    model_name="gemini-3-flash-preview",
+    temperature: float = 0.7,
+    max_tokens: int = 1024,
 ):
+    """
+    Streams the Gemini response chunk-by-chunk using generate_content_stream.
+    Yields text chunks as they arrive — no waiting for the full response.
+    Supports temperature and max_tokens from agent configuration.
+    """
 
     contents = user_message
 
     try:
-        logger.info("Sending request to Gemini")
-        logger.info(f"Using model: {model_name}")
-        logger.info(f"Contents: {contents}")
-        response = client.models.generate_content(
+
+        logger.info(f"Streaming request → model={model_name}, temp={temperature}, max_tokens={max_tokens}")
+
+        response_stream = client.models.generate_content_stream(
             model=model_name,
             contents=contents,
             config=types.GenerateContentConfig(
-                system_instruction=system_prompt
+                system_instruction=system_prompt,
+                temperature=temperature,
+                max_output_tokens=max_tokens,
             )
         )
 
-        yield response.text
+        for chunk in response_stream:
+            if chunk.text:
+                yield chunk.text
 
-        logger.info("Gemini response generated successfully")
+        logger.info("Gemini streaming response completed")
 
     except Exception as e:
+
         logger.error(f"Gemini Error: {e}")
-        raise RuntimeError(f"Gemini Error: {str(e)}")
+
+        raise RuntimeError(
+            f"Gemini Error: {str(e)}"
+        )

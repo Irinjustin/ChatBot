@@ -148,3 +148,32 @@ class Message(Base):
         "Conversation",
         back_populates="messages"
     )
+
+class WebsiteContent(Base):
+    __tablename__ = "website_contents"
+
+    id = Column(Integer, primary_key=True, index=True)
+
+    admin_id = Column(
+        Integer,
+        ForeignKey("users.id"),
+        unique=True,
+        nullable=False
+    )
+
+    website_url = Column(
+        Text,
+        nullable=False
+    )
+
+    content = Column(
+        Text,
+        nullable=False
+    )
+
+    scraped_at = Column(
+        DateTime(timezone=True),
+        server_default=func.now()
+    )
+
+    admin = relationship("User")

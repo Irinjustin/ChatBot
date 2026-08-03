@@ -270,3 +270,39 @@ def update_conversation_title(
         db.refresh(conversation)
 
     return conversation
+
+from models import WebsiteContent
+
+
+def get_website_content(db, admin_id: int):
+    return (
+        db.query(WebsiteContent)
+        .filter(WebsiteContent.admin_id == admin_id)
+        .first()
+    )
+
+
+def save_website_content(
+    db,
+    admin_id: int,
+    website_url: str,
+    content: str,
+):
+    website = get_website_content(db, admin_id)
+
+    if website:
+        website.website_url = website_url
+        website.content = content
+    else:
+        website = WebsiteContent(
+            admin_id=admin_id,
+            website_url=website_url,
+            content=content,
+        )
+        db.add(website)
+
+    db.commit()
+    db.refresh(website)
+
+    return website
+

@@ -16,6 +16,7 @@ from schemas import (
     ConversationSchema,
     MessageSchema,
 )
+from services.rag_service import build_rag_prompt
 
 router = APIRouter(tags=["Chat"])
 
@@ -121,9 +122,17 @@ def chat(
 
             try:
 
+                prompt, configuration, _ = build_rag_prompt(
+    db=db,
+    admin_id=current_user.id,
+    messages=messages,
+    question=data.message,
+)
+
                 for chunk in gemini_service.generate_response(
-                    messages,
-                    data.message
+                    user_message=prompt,
+                    system_prompt=configuration.system_prompt,
+                    model_name=configuration.model_name,
                 ):
                     if chunk:
                         full_reply += chunk

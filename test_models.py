@@ -1,10 +1,10 @@
-from google import genai
 import os
 from dotenv import load_dotenv
 
 load_dotenv()
 
-client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
+api_key = os.getenv("GEMINI_API_KEY")
 
-for model in client.models.list():
-    print(model.name)
+print("API Key:", api_key)
+print("Starts with AIza:", api_key.startswith("AIza") if api_key else False)
+print("Length:", len(api_key) if api_key else None)
