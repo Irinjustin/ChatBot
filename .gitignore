@@ -47,4 +47,14 @@ frontend/node_modules/
 
 # Vite build output (for future React frontend)
 frontend/dist/
+# Milvus
 Milvus/
+milvus/
+
+# MinIO
+minio/
+MinIO/
+
+# Docker volumes
+volumes/
+Milvus/volumes/

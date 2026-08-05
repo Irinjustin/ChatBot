@@ -17,6 +17,7 @@ from schemas import (
     MessageSchema,
 )
 from services.rag_service import build_rag_prompt
+from services.context_service import build_conversation_context
 
 router = APIRouter(tags=["Chat"])
 
@@ -86,7 +87,7 @@ def chat(
             db,
             conversation.id
         )
-
+        conversation_context = build_conversation_context(messages)
         # Set title from first user message
         if len(messages) == 0:
 
@@ -123,11 +124,11 @@ def chat(
             try:
 
                 prompt, configuration, _ = build_rag_prompt(
-    db=db,
-    admin_id=current_user.id,
-    messages=messages,
-    question=data.message,
-)
+                    db=db,
+                    admin_id=current_user.id,
+                    conversation_context=conversation_context,
+                    question=data.message,
+                )
 
                 for chunk in gemini_service.generate_response(
                     user_message=prompt,

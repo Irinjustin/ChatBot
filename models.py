@@ -69,6 +69,11 @@ class AgentConfiguration(Base):
         Boolean,
         default=False
     )
+    rag_enabled = Column(
+    Boolean,
+    default=True,
+    nullable=False
+    )   
 
     admin = relationship(
         "User",

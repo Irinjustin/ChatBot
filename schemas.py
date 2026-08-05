@@ -50,6 +50,7 @@ class AgentConfigurationCreate(BaseModel):
 
     thinking: bool = False
 
+    rag_enabled: bool = True
 
 class AgentConfigurationResponse(AgentConfigurationCreate):
     id: int

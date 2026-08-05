@@ -81,7 +81,7 @@ def save_agent_configuration(
         configuration.temperature = data.temperature
         configuration.max_tokens = data.max_tokens
         configuration.thinking = data.thinking
-
+        configuration.rag_enabled = data.rag_enabled
     else:
 
         configuration = AgentConfiguration(
@@ -91,7 +91,9 @@ def save_agent_configuration(
             model_name=data.model_name,
             temperature=data.temperature,
             max_tokens=data.max_tokens,
-            thinking=data.thinking
+            thinking=data.thinking,
+            rag_enabled=data.rag_enabled
+
         )
 
         db.add(configuration)

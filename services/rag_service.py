@@ -1,7 +1,6 @@
 import crud
 from services.milvus_service import search_chunks
 
-
 # ------------------------------------
 # Query Classification
 # ------------------------------------
@@ -149,7 +148,7 @@ You are not restricted to any website's content for this answer.
 def build_rag_prompt(
     db,
     admin_id: int,
-    messages,
+    conversation_context: str,
     question: str,
 ):
     """
@@ -188,10 +187,7 @@ def build_rag_prompt(
     )
 
     # Build conversation history
-    conversation_history = ""
-    for message in messages:
-        role = "User" if message.role == "user" else "Assistant"
-        conversation_history += f"{role}: {message.content}\n"
+    conversation_history = conversation_context
 
     prompt = f"""Previous Conversation:
 
@@ -207,3 +203,40 @@ Current User Question:
 """
 
     return prompt, configuration, context_found
+
+def search_website(
+    db,
+    admin_id: int,
+    question: str,
+    top_k: int = 3,
+):
+    """
+    Gemini Function Tool.
+
+    Searches the website knowledge base
+    and returns relevant website context.
+    """
+
+    configuration = crud.get_agent_configuration(
+        db,
+        admin_id
+    )
+
+    if configuration is None:
+        raise Exception("Agent configuration not found.")
+
+    results = search_chunks(
+        admin_id=admin_id,
+        question=question,
+        top_k=top_k,
+    )
+
+    if not results:
+        return ""
+
+    context = "\n\n".join(
+        result["chunk"]
+        for result in results
+    )
+
+    return context

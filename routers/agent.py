@@ -70,16 +70,44 @@ def sync_agent_website(
 ):
     try:
 
+        # Get agent configuration
+        configuration = crud.get_agent_configuration(
+            db,
+            current_user.id
+        )
+
+        if configuration is None:
+            raise HTTPException(
+                status_code=404,
+                detail="Agent configuration not found."
+            )
+
+        # Always scrape website
         result = sync_website(
             db=db,
             admin_id=current_user.id
         )
 
-        # Index into Milvus automatically
-        index_website(
-            db=db,
-            admin_id=current_user.id
-        )
+        # Only perform RAG indexing if enabled
+        if configuration.rag_enabled:
+
+            index_website(
+                db=db,
+                admin_id=current_user.id
+            )
+
+            result["rag_enabled"] = True
+            result["message"] = (
+                "Website synced and indexed successfully."
+            )
+
+        else:
+
+            result["rag_enabled"] = False
+            result["message"] = (
+                "Website synced successfully. "
+                "RAG is disabled, so indexing was skipped."
+            )
 
         return result
 
