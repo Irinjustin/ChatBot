@@ -1,5 +1,9 @@
+from typing import List
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
+
+from google.genai import types
 
 import crud
 import schemas
@@ -11,8 +15,11 @@ from models import User
 from gemini_service import generate_response
 
 from services.scraper_service import sync_website
-from services.milvus_service import search_chunks
 from services.milvus_service import index_website
+from services.function_service import (
+    build_search_knowledge_tool,
+    build_tool_executor,
+)
 
 
 router = APIRouter(
@@ -20,6 +27,10 @@ router = APIRouter(
     tags=["Agent Configuration"]
 )
 
+
+# ============================================================
+# AGENT CONFIGURATION
+# ============================================================
 
 @router.get(
     "/config",
@@ -32,7 +43,7 @@ def get_agent_configuration(
 
     configuration = crud.get_agent_configuration(
         db,
-        current_user.id
+        int(current_user.id)
     )
 
     if configuration is None:
@@ -56,58 +67,167 @@ def save_agent_configuration(
 
     configuration = crud.save_agent_configuration(
         db,
-        current_user.id,
+        int(current_user.id),
         data
     )
 
     return configuration
 
 
-@router.post("/sync-website")
-def sync_agent_website(
+# ============================================================
+# KNOWLEDGE BASE
+# ============================================================
+
+@router.get(
+    "/knowledge-base",
+    response_model=List[schemas.WebsiteContentResponse]
+)
+def list_knowledge_base(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
+    """
+    Return all websites belonging to the current admin's
+    knowledge base.
+
+    Only the website ID and URL are returned.
+    Scraped content is not returned.
+    """
+
+    return crud.get_all_website_contents(
+        db,
+        int(current_user.id)
+    )
+
+
+@router.post(
+    "/knowledge-base",
+    response_model=schemas.WebsiteContentResponse
+)
+def add_knowledge_base_website(
+    data: schemas.KnowledgeBaseAddRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Add a website to the knowledge base.
+
+    Flow:
+
+    1. Scrape the website.
+    2. Save/update its content in PostgreSQL.
+    3. Generate embeddings.
+    4. Index the website's chunks in Milvus.
+    5. Return the WebsiteContent record.
+    """
+
     try:
 
-        # Get agent configuration
-        configuration = crud.get_agent_configuration(
-            db,
-            current_user.id
+        admin_id = int(current_user.id)
+
+        # ----------------------------------------------------
+        # 1. Scrape website and save content
+        # ----------------------------------------------------
+
+        sync_website(
+            db=db,
+            admin_id=admin_id,
+            website_url=data.website_url
         )
 
-        if configuration is None:
+        # ----------------------------------------------------
+        # 2. Index only this website in Milvus
+        # ----------------------------------------------------
+
+        index_website(
+            db=db,
+            admin_id=admin_id,
+            website_url=data.website_url
+        )
+
+        # ----------------------------------------------------
+        # 3. Get the saved WebsiteContent record
+        # ----------------------------------------------------
+
+        website = crud.get_website_content(
+            db=db,
+            admin_id=admin_id,
+            website_url=data.website_url
+        )
+
+        if website is None:
             raise HTTPException(
                 status_code=404,
-                detail="Agent configuration not found."
+                detail="Website content was not found after syncing."
             )
 
-        # Always scrape website
-        result = sync_website(
-            db=db,
-            admin_id=current_user.id
+        return website
+
+    except HTTPException:
+        raise
+
+    except Exception as e:
+
+        raise HTTPException(
+            status_code=400,
+            detail=str(e)
         )
 
-        # Only perform RAG indexing if enabled
-        if configuration.rag_enabled:
 
-            index_website(
-                db=db,
-                admin_id=current_user.id
-            )
+# ============================================================
+# SYNC EXISTING WEBSITE
+# ============================================================
 
-            result["rag_enabled"] = True
-            result["message"] = (
-                "Website synced and indexed successfully."
-            )
+@router.post("/sync-website")
+def sync_agent_website(
+    data: schemas.SyncWebsiteRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Re-scrape an existing website and update only its
+    Milvus index.
 
-        else:
+    Other websites in the knowledge base remain untouched.
 
-            result["rag_enabled"] = False
-            result["message"] = (
-                "Website synced successfully. "
-                "RAG is disabled, so indexing was skipped."
-            )
+    Request body:
+
+    {
+        "website_url": "https://example.com"
+    }
+    """
+
+    try:
+
+        admin_id = int(current_user.id)
+
+        # ----------------------------------------------------
+        # 1. Re-scrape and update PostgreSQL
+        # ----------------------------------------------------
+
+        result = sync_website(
+            db=db,
+            admin_id=admin_id,
+            website_url=data.website_url
+        )
+
+        # ----------------------------------------------------
+        # 2. Re-index only this website
+        # ----------------------------------------------------
+
+        index_website(
+            db=db,
+            admin_id=admin_id,
+            website_url=data.website_url
+        )
+
+        # ----------------------------------------------------
+        # 3. Return result
+        # ----------------------------------------------------
+
+        result["message"] = (
+            "Website synced and indexed successfully."
+        )
 
         return result
 
@@ -119,6 +239,10 @@ def sync_agent_website(
         )
 
 
+# ============================================================
+# AGENT TEST
+# ============================================================
+
 @router.post(
     "/test",
     response_model=schemas.AgentTestResponse
@@ -129,9 +253,15 @@ def test_agent(
     current_user: User = Depends(get_current_user)
 ):
 
+    admin_id = int(current_user.id)
+
+    # --------------------------------------------------------
+    # Get agent configuration
+    # --------------------------------------------------------
+
     configuration = crud.get_agent_configuration(
         db,
-        current_user.id
+        admin_id
     )
 
     if configuration is None:
@@ -140,69 +270,61 @@ def test_agent(
             detail="Agent configuration not found."
         )
 
-    # ------------------------------------
-    # Handle greetings
-    # ------------------------------------
+    # --------------------------------------------------------
+    # Build single-turn contents
+    # --------------------------------------------------------
 
-    greetings = [
-        "hi",
-        "hello",
-        "hey",
-        "good morning",
-        "good afternoon",
-        "good evening"
+    contents = [
+        types.Content(
+            role="user",
+            parts=[
+                types.Part(
+                    text=data.message
+                )
+            ]
+        )
     ]
 
-    if data.message.lower().strip() in greetings:
-        return schemas.AgentTestResponse(
-            reply="Hello! How can I help you with information from this website?"
+    # --------------------------------------------------------
+    # Configure RAG / Function Calling
+    # --------------------------------------------------------
+
+    tools = None
+    tool_executor = None
+
+    if configuration.rag_enabled:
+
+        # Register Gemini's search_knowledge function
+        tools = [
+            build_search_knowledge_tool()
+        ]
+
+        # Python implementation of search_knowledge
+        tool_executor = build_tool_executor(
+            db=db,
+            admin_id=admin_id,
+            selected_website_ids=(
+                configuration.selected_website_ids or []
+            ),
         )
 
-    # ------------------------------------
-    # Retrieve relevant chunks from Milvus
-    # ------------------------------------
-
-    search_results = search_chunks(
-        admin_id=current_user.id,
-        question=data.message,
-        top_k=3
-    )
-
-    # Build website context
-    context = "\n\n".join(
-        result["chunk"]
-        for result in search_results
-    )
-
-    # Optional: Print retrieved chunks for debugging
-    print("\n========== RETRIEVED CHUNKS ==========")
-
-    for i, result in enumerate(search_results, 1):
-        print(f"\nChunk {i}")
-        print("Score:", result["score"])
-        print(result["chunk"][:500])
-
-    print("======================================\n")
-
-    messages = []
+    # --------------------------------------------------------
+    # Generate Gemini response
+    # --------------------------------------------------------
 
     try:
 
-        response = generate_response(
-            user_message=f"""
-Website Context:
-
-{context}
-
-User Question:
-
-{data.message}
-""",
-            system_prompt=configuration.system_prompt,
-            model_name=configuration.model_name
+        reply = "".join(
+            generate_response(
+                user_message=contents,
+                system_prompt=configuration.system_prompt,
+                model_name=configuration.model_name,
+                temperature=configuration.temperature,
+                max_tokens=configuration.max_tokens,
+                tools=tools,
+                tool_executor=tool_executor,
+            )
         )
-
-        reply = "".join(response)
 
     except RuntimeError as e:
 
@@ -210,6 +332,10 @@ User Question:
             status_code=503,
             detail=str(e)
         )
+
+    # --------------------------------------------------------
+    # Return response
+    # --------------------------------------------------------
 
     return schemas.AgentTestResponse(
         reply=reply

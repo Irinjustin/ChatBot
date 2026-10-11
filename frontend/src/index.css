@@ -1,1 +1,148 @@
 @import "tailwindcss";
+
+/* ═══════════════════════════════════════════════════════════════
+   Pixel-Perfect Glassmorphism AI SaaS Theme
+   Background Gradient: #0B0B14 → #141428
+   Ambient Glows: Top-Left Purple Nebula, Bottom-Right Warm Amber
+═══════════════════════════════════════════════════════════════ */
+
+:root {
+  --bg-gradient: linear-gradient(135deg, #0B0B14 0%, #111122 50%, #141428 100%);
+  --font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', Roboto, sans-serif;
+}
+
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html, body {
+  min-height: 100vh;
+  width: 100%;
+  font-family: var(--font-family);
+  background: #0B0B14;
+  color: #FFFFFF;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  overflow-x: hidden;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   Ambient Background & Nebula Glows
+═══════════════════════════════════════════════════════════════ */
+.bg-reference {
+  position: fixed;
+  inset: 0;
+  background: linear-gradient(135deg, #0B0B14 0%, #0F0E1E 45%, #141428 100%);
+  z-index: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+/* Top-Left Soft Purple Nebula Glow */
+.glow-purple-top-left {
+  position: absolute;
+  top: -15vw;
+  left: -15vw;
+  width: 65vw;
+  height: 65vw;
+  max-width: 850px;
+  max-height: 850px;
+  background: radial-gradient(circle at center, rgba(120, 50, 235, 0.45) 0%, rgba(95, 35, 205, 0.2) 35%, rgba(60, 20, 150, 0.05) 60%, transparent 75%);
+  filter: blur(80px);
+  pointer-events: none;
+  animation: floatPurple 16s ease-in-out infinite alternate;
+}
+
+/* Bottom-Right Warm Orange Glow */
+.glow-orange-bottom-right {
+  position: absolute;
+  bottom: -15vw;
+  right: -15vw;
+  width: 60vw;
+  height: 60vw;
+  max-width: 750px;
+  max-height: 750px;
+  background: radial-gradient(circle at center, rgba(235, 115, 35, 0.38) 0%, rgba(190, 80, 20, 0.15) 40%, transparent 70%);
+  filter: blur(85px);
+  pointer-events: none;
+  animation: floatOrange 18s ease-in-out infinite alternate;
+}
+
+@keyframes floatPurple {
+  0% { transform: translate(0, 0) scale(1); }
+  50% { transform: translate(30px, 20px) scale(1.08); }
+  100% { transform: translate(-10px, 40px) scale(0.96); }
+}
+
+@keyframes floatOrange {
+  0% { transform: translate(0, 0) scale(1); }
+  50% { transform: translate(-25px, -20px) scale(1.1); }
+  100% { transform: translate(15px, -35px) scale(0.95); }
+}
+
+/* Subtle Star Dust Overlay */
+.star-dust {
+  position: absolute;
+  inset: 0;
+  background-image: radial-gradient(rgba(255, 255, 255, 0.08) 1px, transparent 1px);
+  background-size: 40px 40px;
+  opacity: 0.35;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   Glassmorphism Card Recipe (Match Reference Image)
+═══════════════════════════════════════════════════════════════ */
+.reference-glass-card {
+  background: rgba(18, 16, 32, 0.55);
+  backdrop-filter: blur(30px) saturate(140%);
+  -webkit-backdrop-filter: blur(30px) saturate(140%);
+  border-radius: 16px;
+  border-top: 1px solid rgba(255, 255, 255, 0.18);
+  border-left: 1px solid rgba(255, 255, 255, 0.09);
+  border-right: 1px solid rgba(255, 255, 255, 0.09);
+  border-bottom: 1px solid rgba(235, 115, 35, 0.25);
+  box-shadow: 
+    0 30px 70px rgba(0, 0, 0, 0.7),
+    0 0 45px rgba(120, 50, 235, 0.18),
+    inset 0 1px 1px rgba(255, 255, 255, 0.2);
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   Inputs Styling
+═══════════════════════════════════════════════════════════════ */
+.reference-input {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 14px;
+  color: #FFFFFF;
+  font-size: 15px;
+  padding-left: 28px;
+  padding-right: 18px;
+  text-align: left;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.reference-input::placeholder {
+  color: rgba(255, 255, 255, 0.35);
+  text-align: left;
+}
+
+.reference-input:hover {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.reference-input:focus {
+  outline: none;
+  background: rgba(255, 255, 255, 0.07);
+  border-color: #8A55FF;
+  box-shadow: 0 0 0 3.5px rgba(138, 85, 255, 0.25), 0 0 20px rgba(138, 85, 255, 0.3);
+}
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.15); border-radius: 99px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.25); }

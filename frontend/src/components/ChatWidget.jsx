@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import FloatingChatButton from "./FloatingChatButton";
 import ChatWindow from "./ChatWindow";
 import { widgetApi } from "../services/widgetApi";
@@ -6,39 +6,10 @@ import { widgetApi } from "../services/widgetApi";
 export default function ChatWidget({ agentId = 1, botName = "AI Assistant" }) {
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState([]);
-  const [sessionId, setSessionId] = useState(() => {
-    return localStorage.getItem(`chat_widget_session_id_${agentId}`) || null;
-  });
+  const [sessionId, setSessionId] = useState(null);
   const [isTyping, setIsTyping] = useState(false);
   const [error, setError] = useState(null);
 
-  // Sync sessionId whenever agentId changes
-  useEffect(() => {
-    const stored = localStorage.getItem(`chat_widget_session_id_${agentId}`);
-    setSessionId(stored || null);
-    if (!stored) {
-      setMessages([]);
-    }
-  }, [agentId]);
-
-  // Fetch history when sessionId or agentId changes
-  useEffect(() => {
-    if (sessionId) {
-      widgetApi
-        .getMessages(sessionId)
-        .then((fetchedMessages) => {
-          setMessages(fetchedMessages || []);
-        })
-        .catch((err) => {
-          console.error("Failed to load previous messages:", err);
-          localStorage.removeItem(`chat_widget_session_id_${agentId}`);
-          setSessionId(null);
-          setMessages([]);
-        });
-    } else {
-      setMessages([]);
-    }
-  }, [sessionId, agentId]);
 
 
   const ensureSession = async () => {
@@ -48,13 +19,20 @@ export default function ChatWidget({ agentId = 1, botName = "AI Assistant" }) {
       const data = await widgetApi.startConversation(agentId);
       const newSessionId = data.session_id;
       setSessionId(newSessionId);
-      localStorage.setItem(`chat_widget_session_id_${agentId}`, newSessionId);
       return newSessionId;
     } catch (err) {
       console.error("Failed to start conversation:", err);
       setError("Unable to connect to AI Assistant. Please try again.");
       throw err;
     }
+  };
+
+  const handleClose = () => {
+    setIsOpen(false);
+    setSessionId(null);
+    setMessages([]);
+    setIsTyping(false);
+    setError(null);
   };
 
   const handleSendMessage = async (text) => {
@@ -107,12 +85,18 @@ export default function ChatWidget({ agentId = 1, botName = "AI Assistant" }) {
     <>
       <FloatingChatButton
         isOpen={isOpen}
-        onClick={() => setIsOpen(!isOpen)}
+        onClick={() => {
+          if (isOpen) {
+            handleClose();
+          } else {
+            setIsOpen(true);
+          }
+        }}
       />
 
       <ChatWindow
         isOpen={isOpen}
-        onClose={() => setIsOpen(false)}
+        onClose={handleClose}
         messages={messages}
         isTyping={isTyping}
         error={error}

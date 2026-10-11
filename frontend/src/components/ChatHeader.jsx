@@ -1,37 +1,84 @@
 import React from "react";
 import { Minus, Bot } from "lucide-react";
 
-export default function ChatHeader({
-  botName = "AI Assistant",
-  isOnline = true,
-  onMinimize,
-}) {
+export default function ChatHeader({ botName = "AI Assistant", isOnline = true, onMinimize }) {
   return (
-    <div className="bg-slate-900 text-white px-5 py-4 flex items-center justify-between rounded-t-2xl border-b border-slate-800 shadow-md select-none">
-      <div className="flex items-center space-x-3">
-        <div className="relative">
-          <div className="w-10 h-10 rounded-full bg-indigo-600/30 flex items-center justify-center border border-indigo-500/40 shadow-inner">
-            <Bot className="w-6 h-6 text-indigo-400" />
+    <div
+      style={{
+        padding: '14px 18px',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        flexShrink: 0,
+        borderBottom: '1px solid rgba(255,255,255,0.07)',
+        background: 'rgba(0,0,0,0.2)',
+        userSelect: 'none',
+      }}
+    >
+      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+        {/* Bot avatar */}
+        <div style={{ position: 'relative' }}>
+          <div
+            style={{
+              width: '38px',
+              height: '38px',
+              borderRadius: '50%',
+              background: 'linear-gradient(135deg, rgba(124,106,245,0.25), rgba(155,141,248,0.2))',
+              border: '1px solid rgba(124,106,245,0.28)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
+            <Bot style={{ width: '18px', height: '18px', color: '#9B8DF8' }} />
           </div>
-          {isOnline && (
-            <span className="absolute bottom-0 right-0 w-3 h-3 bg-emerald-400 border-2 border-slate-900 rounded-full"></span>
-          )}
+          {/* Online dot */}
+          <span
+            style={{
+              position: 'absolute',
+              bottom: '1px',
+              right: '1px',
+              width: '9px',
+              height: '9px',
+              borderRadius: '50%',
+              background: '#34D399',
+              border: '2px solid rgba(8,10,16,0.9)',
+            }}
+          />
         </div>
+
+        {/* Name + status */}
         <div>
-          <h3 className="font-semibold text-base leading-tight text-slate-100">{botName}</h3>
-          <p className="text-xs text-slate-400 flex items-center gap-1.5 mt-0.5">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 inline-block animate-pulse"></span>
-            Online
+          <p style={{ margin: 0, fontSize: '14px', fontWeight: 600, color: '#F1F5F9', lineHeight: 1.3 }}>
+            {botName}
+          </p>
+          <p style={{ margin: '2px 0 0', fontSize: '11px', color: '#64748B', display: 'flex', alignItems: 'center', gap: '4px' }}>
+            <span style={{ width: '5px', height: '5px', borderRadius: '50%', background: '#34D399', display: 'inline-block', animation: 'pulseGlow 2s ease infinite' }} />
+            Online — typically replies instantly
           </p>
         </div>
       </div>
 
+      {/* Minimize button */}
       <button
         onClick={onMinimize}
         aria-label="Minimize Chat"
-        className="p-1.5 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-800 transition-colors focus:outline-none"
+        style={{
+          padding: '7px',
+          borderRadius: '10px',
+          background: 'transparent',
+          border: 'none',
+          color: 'rgba(255,255,255,0.28)',
+          cursor: 'pointer',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          transition: 'all 150ms ease',
+        }}
+        onMouseEnter={(e) => { e.currentTarget.style.color = '#F1F5F9'; e.currentTarget.style.background = 'rgba(255,255,255,0.07)'; }}
+        onMouseLeave={(e) => { e.currentTarget.style.color = 'rgba(255,255,255,0.28)'; e.currentTarget.style.background = 'transparent'; }}
       >
-        <Minus className="w-5 h-5" />
+        <Minus style={{ width: '16px', height: '16px' }} />
       </button>
     </div>
   );

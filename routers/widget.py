@@ -4,6 +4,8 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
+from google.genai import types
+
 import crud
 import gemini_service
 from database import get_db
@@ -14,23 +16,12 @@ from schemas import (
     WidgetChatRequest,
     WidgetConversationRequest,
 )
-from services.rag_service import (
-    build_rag_prompt,
-    classify_query,
-    build_conversational_prompt,
-    build_general_prompt,
+from services.function_service import (
+    build_search_knowledge_tool,
+    build_tool_executor,
 )
 
 router = APIRouter(prefix="/widget", tags=["Widget"])
-
-# System prompt used for conversational & general queries.
-# Does NOT restrict Gemini to website content — allows free, natural responses.
-NEUTRAL_SYSTEM_PROMPT = (
-    "You are a friendly and helpful AI assistant. "
-    "Answer the user's message naturally and concisely. "
-    "Be conversational and warm."
-)
-
 
 
 @router.post(
@@ -42,13 +33,15 @@ def create_widget_conversation(
     db: Session = Depends(get_db)
 ):
     try:
+
         conversation = crud.create_new_conversation(
             db,
             admin_id=data.agent_id
         )
 
         logger.info(
-            f"Widget Conversation created: {conversation.session_id} for agent {data.agent_id}"
+            f"Widget Conversation created: {conversation.session_id} "
+            f"for agent {data.agent_id}"
         )
 
         return ConversationResponse(
@@ -56,7 +49,9 @@ def create_widget_conversation(
         )
 
     except Exception as e:
+
         logger.error(f"Widget Create Conversation Error: {e}")
+
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Unable to create conversation."
@@ -69,6 +64,7 @@ def widget_chat(
     db: Session = Depends(get_db)
 ):
     try:
+
         conversation = crud.get_conversation_by_session(
             db,
             data.session_id
@@ -87,7 +83,9 @@ def widget_chat(
 
         # Set title from first user message
         if len(messages) == 0:
+
             title = data.message.strip()
+
             if len(title) > 50:
                 title = title[:50] + "..."
 
@@ -109,81 +107,85 @@ def widget_chat(
         )
 
         def event_stream():
+
             full_reply = ""
+
             try:
-                admin_id = conversation.admin_id or 1
 
-                query_type = classify_query(data.message)
+                admin_id = conversation.admin_id
 
-                logger.info(
-                    f"Widget query classified as '{query_type}' for session {conversation.session_id}"
+                # ── Agent Configuration ──────────────────────────────
+                configuration = crud.get_agent_configuration(
+                    db,
+                    admin_id
                 )
-
-                configuration = crud.get_agent_configuration(db, admin_id)
 
                 if configuration is None:
                     yield "Agent configuration not found."
                     return
 
-                if query_type == "conversational":
-                    # Greetings / small talk — skip Milvus, use neutral system prompt
-                    prompt = build_conversational_prompt(
-                        messages=messages,
-                        question=data.message,
+                # ── Build conversation contents ───────────────────────
+                # Convert stored history to types.Content, then append
+                # the current user message as the final turn.
+                contents = gemini_service.build_contents(messages)
+                contents.append(
+                    types.Content(
+                        role="user",
+                        parts=[types.Part(text=data.message)]
                     )
-                    active_system_prompt = NEUTRAL_SYSTEM_PROMPT
+                )
 
-                elif query_type == "general":
-                    # Off-topic general knowledge — skip Milvus, use neutral system prompt
-                    prompt = build_general_prompt(
-                        messages=messages,
-                        question=data.message,
-                    )
-                    active_system_prompt = NEUTRAL_SYSTEM_PROMPT
+                # ── Conditionally register search_knowledge tool ──────
+                tools = None
+                tool_executor = None
 
-                else:
-                    # Website knowledge query — use RAG + configured system prompt
-                    prompt, configuration, context_found = build_rag_prompt(
+                if configuration.rag_enabled:
+
+                    tools = [build_search_knowledge_tool()]
+                    tool_executor = build_tool_executor(
                         db=db,
                         admin_id=admin_id,
-                        messages=messages,
-                        question=data.message,
                     )
-                    active_system_prompt = configuration.system_prompt
 
-                    # No relevant website context → return website fallback
-                    if not context_found:
-                        fallback = "I couldn't find that information on the website."
-                        yield fallback
-                        crud.save_message(
-                            db=db,
-                            conversation_id=conversation.id,
-                            role="model",
-                            content=fallback
-                        )
-                        logger.info(
-                            f"Widget: No relevant context found for session {conversation.session_id}"
-                        )
-                        return
+                    logger.info(
+                        f"Widget RAG enabled — search_knowledge tool registered "
+                        f"for session {conversation.session_id}"
+                    )
 
-                # Stream the Gemini response
+                else:
+
+                    logger.info(
+                        f"Widget RAG disabled — Gemini answers directly "
+                        f"for session {conversation.session_id}"
+                    )
+
+                import time
+                start_time = time.time()
+
+                # ── Generate response ─────────────────────────────────
                 for chunk in gemini_service.generate_response(
-                    user_message=prompt,
-                    system_prompt=active_system_prompt,
+                    user_message=contents,
+                    system_prompt=configuration.system_prompt,
                     model_name=configuration.model_name,
-                    temperature=getattr(configuration, "temperature", 0.7),
-                    max_tokens=getattr(configuration, "max_tokens", 1024),
+                    temperature=configuration.temperature,
+                    max_tokens=configuration.max_tokens,
+                    tools=tools,
+                    tool_executor=tool_executor,
                 ):
                     if chunk:
                         full_reply += chunk
                         yield chunk
 
+                end_time = time.time()
+                response_time_ms = (end_time - start_time) * 1000.0
 
+                # ── Persist the assistant reply ───────────────────────
                 crud.save_message(
                     db=db,
                     conversation_id=conversation.id,
                     role="model",
-                    content=full_reply
+                    content=full_reply,
+                    response_time_ms=response_time_ms
                 )
 
                 logger.info(
@@ -191,11 +193,12 @@ def widget_chat(
                 )
 
             except Exception as e:
-                logger.error(f"Widget Streaming Error: {type(e).__name__}: {e}")
+
+                logger.error(
+                    f"Widget Streaming Error: {type(e).__name__}: {e}"
+                )
+
                 yield "Sorry, I couldn't generate a response at the moment."
-
-
-
 
         return StreamingResponse(
             event_stream(),
@@ -204,8 +207,11 @@ def widget_chat(
 
     except HTTPException:
         raise
+
     except Exception as e:
+
         logger.error(f"Widget Chat Error: {e}")
+
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Unable to process your request."
@@ -221,6 +227,7 @@ def get_widget_messages(
     db: Session = Depends(get_db)
 ):
     try:
+
         logger.info(
             f"Fetching widget messages for session {session_id}"
         )
@@ -236,7 +243,9 @@ def get_widget_messages(
         return messages
 
     except Exception as e:
+
         logger.error(f"Fetch Widget Messages Error: {e}")
+
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Unable to fetch messages."

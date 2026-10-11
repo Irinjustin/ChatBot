@@ -1,29 +1,223 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { agentService } from '../services/agentService';
-import { Save, AlertCircle, CheckCircle2, Loader2, Settings2, MessageSquare, Send, RefreshCw, Globe } from 'lucide-react';
+import {
+  Save, AlertCircle, CheckCircle2, Loader2, Settings2,
+  MessageSquare, Send, RefreshCw, Globe, Plus, X, Database,
+} from 'lucide-react';
 
-const AgentConfiguration = () => {
-  const [config, setConfig] = useState({
-    website_url: '',
-    system_prompt: '',
-    model_name: 'gemini-2.0-flash',
-    temperature: 0.7,
-    max_tokens: 1024,
-    thinking: false
-  });
+// ─── Shared helpers ───────────────────────────────────────────────────────────
+const glassInput = {
+  background: 'rgba(255,255,255,0.04)',
+  border: '1px solid rgba(255,255,255,0.09)',
+  color: 'var(--text)',
+};
+const onFocus = (e) => { e.target.style.borderColor = 'rgba(124,106,245,0.6)'; e.target.style.boxShadow = '0 0 0 3px rgba(124,106,245,0.10)'; };
+const onBlur = (e) => { e.target.style.borderColor = 'rgba(255,255,255,0.09)'; e.target.style.boxShadow = 'none'; };
 
-  
-  const [isLoading, setIsLoading] = useState(true);
-  const [isSaving, setIsSaving] = useState(false);
+function Label({ htmlFor, children }) {
+  return (
+    <label htmlFor={htmlFor} className="block text-xs font-medium mb-2" style={{ color: 'var(--text-muted)' }}>
+      {children}
+    </label>
+  );
+}
+
+// ─── Glass Section Card ───────────────────────────────────────────────────────
+function SectionCard({ icon: Icon, title, subtitle, children, action, accentColor = '#9B8DF8' }) {
+  return (
+    <div
+      className="glass rounded-xl overflow-hidden"
+      style={{ boxShadow: 'var(--shadow-card)' }}
+    >
+      {/* Card header */}
+      <div
+        className="flex items-center justify-between px-6 py-4.5"
+        style={{ borderBottom: '1px solid rgba(255,255,255,0.07)' }}
+      >
+        <div className="flex items-center gap-3 pr-4">
+          <Icon className="w-4 h-4 flex-shrink-0" style={{ color: accentColor }} />
+          <div>
+            <p className="text-sm font-semibold" style={{ color: 'var(--text)' }}>{title}</p>
+            {subtitle && <p className="text-xs mt-0.5" style={{ color: 'var(--text-dim)' }}>{subtitle}</p>}
+          </div>
+        </div>
+        {action}
+      </div>
+      <div className="p-6">{children}</div>
+    </div>
+  );
+}
+
+// ─── Model List ───────────────────────────────────────────────────────────────
+const MODELS = [
+  { id: 'gemini-3.6-flash', name: 'Gemini 3.6 Flash', tier: 'Flash', badge: 'Latest', badgeColor: '#6366F1', description: 'Newest Flash — fastest, smartest responses.', caps: ['Fastest response', 'Smart reasoning', 'Cost efficient'], deprecated: false },
+  { id: 'gemini-3.5-flash', name: 'Gemini 3.5 Flash', tier: 'Flash', badge: 'Recommended', badgeColor: '#10b981', description: 'Best balance of intelligence and speed for production.', caps: ['Fast responses', 'Smart reasoning', 'Cost efficient'], deprecated: false },
+  { id: 'gemini-3.5-flash-lite', name: 'Gemini 3.5 Flash Lite', tier: 'Lite', badge: null, badgeColor: null, description: 'Lightweight and efficient for high-volume tasks.', caps: ['Ultra-fast', 'Low cost', 'High volume'], deprecated: false },
+  { id: 'gemini-3.1-flash-lite', name: 'Gemini 3.1 Flash Lite', tier: 'Lite', badge: null, badgeColor: null, description: 'Stable lightweight model for high-volume tasks.', caps: ['Ultra-fast', 'Low cost', 'High volume'], deprecated: false },
+  { id: 'gemini-3.1-flash-lite-preview', name: 'Gemini 3.1 Flash Lite Preview', tier: 'Preview', badge: 'Preview', badgeColor: '#f59e0b', description: 'Preview release — try next Flash Lite features early.', caps: ['Preview features', 'Ultra-fast', 'Low cost'], deprecated: false },
+  { id: 'gemini-3.1-pro-preview', name: 'Gemini 3.1 Pro Preview', tier: 'Preview', badge: 'Preview', badgeColor: '#f59e0b', description: 'Preview of Pro-tier with advanced reasoning.', caps: ['Deep reasoning', 'Long context', 'Preview'], deprecated: false },
+  { id: 'gemini-3-flash-preview', name: 'Gemini 3 Flash Preview', tier: 'Preview', badge: 'Preview', badgeColor: '#f59e0b', description: 'Early Gemini 3 Flash with next-gen capabilities.', caps: ['Next-gen', 'Fast', 'Preview features'], deprecated: false },
+  // Deprecated
+  { id: 'gemini-2.5-pro', name: 'Gemini 2.5 Pro', tier: 'Pro', badge: null, description: 'State-of-the-art reasoning and multimodal.', caps: ['Deep reasoning', 'Long context 1M', 'Code expert'], deprecated: true },
+  { id: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash', tier: 'Flash', badge: null, description: 'Best balance of intelligence and speed.', caps: ['Fast responses', 'Smart reasoning', 'Cost efficient'], deprecated: true },
+  { id: 'gemini-2.5-flash-lite', name: 'Gemini 2.5 Flash Lite', tier: 'Lite', badge: null, description: 'Lightweight variant of Gemini 2.5 Flash.', caps: ['Ultra-fast', 'Low cost', 'High volume'], deprecated: true },
+  { id: 'gemini-2.0-flash', name: 'Gemini 2.0 Flash', tier: 'Flash', badge: null, description: 'Next-gen multimodal for the agentic era.', caps: ['Agentic tasks', 'Multimodal', 'Low latency'], deprecated: true },
+  { id: 'gemini-2.0-flash-lite', name: 'Gemini 2.0 Flash Lite', tier: 'Lite', badge: null, description: 'Ultra-fast lightweight for high-volume chats.', caps: ['Lowest latency', 'High throughput', 'Cost efficient'], deprecated: true },
+];
+
+// ─── Add Website Modal ────────────────────────────────────────────────────────
+const AddWebsiteModal = ({ onClose, onAdd }) => {
+  const [url, setUrl] = useState('');
+  const [isAdding, setIsAdding] = useState(false);
   const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
+  const inputRef = useRef(null);
 
-  // Sync State
+  useEffect(() => { inputRef.current?.focus(); }, []);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!url.trim()) return;
+    setError('');
+    setIsAdding(true);
+    try { await onAdd(url.trim()); onClose(); }
+    catch (err) { setError(err.response?.data?.detail || 'Failed to add website. Please try again.'); }
+    finally { setIsAdding(false); }
+  };
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center px-4"
+      style={{ background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(8px)' }}
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+    >
+      <div
+        className="glass w-full max-w-md rounded-2xl overflow-hidden animate-fade-up"
+        style={{ boxShadow: 'var(--shadow-float)', border: '1px solid rgba(255,255,255,0.12)' }}
+      >
+        <div className="flex items-center justify-between px-6 py-4" style={{ borderBottom: '1px solid rgba(255,255,255,0.07)' }}>
+          <div className="flex items-center gap-2.5">
+            <Globe className="w-4 h-4" style={{ color: '#6366F1' }} />
+            <span className="text-sm font-semibold" style={{ color: '#F1F5F9' }}>Add Website</span>
+          </div>
+          <button onClick={onClose} className="p-1.5 rounded-lg transition-colors" style={{ color: 'rgba(255,255,255,0.3)' }}>
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="px-6 py-6 space-y-4">
+          <div>
+            <Label htmlFor="add-website-url">Website URL</Label>
+            <input
+              ref={inputRef}
+              id="add-website-url"
+              type="url"
+              value={url}
+              onChange={(e) => setUrl(e.target.value)}
+              placeholder="https://example.com"
+              required
+              disabled={isAdding}
+              className="w-full px-4 py-3 rounded-xl text-sm outline-none transition-all"
+              style={glassInput}
+              onFocus={onFocus}
+              onBlur={onBlur}
+            />
+            <p className="mt-1.5 text-xs" style={{ color: 'rgba(255,255,255,0.25)' }}>
+              The website will be scraped, saved, and indexed automatically.
+            </p>
+          </div>
+
+          {error && <div className="px-4 py-3 rounded-xl text-sm" style={{ background: 'rgba(248,113,113,0.08)', border: '1px solid rgba(248,113,113,0.2)', color: '#F87171' }}>{error}</div>}
+          {isAdding && (
+            <div className="px-4 py-3 rounded-xl text-sm flex items-center gap-2" style={{ background: 'rgba(99,102,241,0.08)', border: '1px solid rgba(99,102,241,0.2)', color: '#818CF8' }}>
+              <Loader2 className="w-4 h-4 animate-spin flex-shrink-0" />
+              Scraping and indexing… this may take a moment.
+            </div>
+          )}
+
+          <div className="flex gap-3 pt-1">
+            <button
+              type="button"
+              onClick={onClose}
+              disabled={isAdding}
+              className="flex-1 px-4 py-2.5 rounded-xl text-sm font-medium transition-all disabled:opacity-50"
+              style={{ border: '1px solid rgba(255,255,255,0.09)', color: 'rgba(255,255,255,0.5)', background: 'transparent' }}
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={!url.trim() || isAdding}
+              className="flex-1 px-4 py-2.5 rounded-xl text-sm font-semibold text-white transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+              style={{ background: 'linear-gradient(135deg, #6366F1, #8B5CF6)', boxShadow: '0 4px 16px rgba(99,102,241,0.25)' }}
+            >
+              {isAdding ? <><Loader2 className="w-4 h-4 animate-spin" />Adding…</> : <><Plus className="w-4 h-4" />Add</>}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+};
+
+// ─── Website Row ──────────────────────────────────────────────────────────────
+const WebsiteRow = ({ website, onSync }) => {
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncResult, setSyncResult] = useState(null);
   const [syncError, setSyncError] = useState('');
 
-  // Chat Preview State
+  const handleSync = async () => {
+    setSyncResult(null); setSyncError(''); setIsSyncing(true);
+    try { const result = await onSync(website.website_url); setSyncResult(result); }
+    catch (err) { setSyncError(err.response?.data?.detail || 'Sync failed.'); }
+    finally { setIsSyncing(false); }
+  };
+
+  return (
+    <div className="space-y-1.5">
+      <div
+        className="flex items-center justify-between gap-3 px-4 py-3 rounded-xl"
+        style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)' }}
+      >
+        <div className="flex items-center gap-2.5 min-w-0">
+          <Globe className="w-3.5 h-3.5 flex-shrink-0" style={{ color: 'rgba(255,255,255,0.25)' }} />
+          <span className="text-sm truncate font-mono" style={{ color: 'rgba(255,255,255,0.5)' }}>{website.website_url}</span>
+        </div>
+        <button
+          type="button"
+          onClick={handleSync}
+          disabled={isSyncing}
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all disabled:opacity-50 flex-shrink-0"
+          style={{ border: '1px solid rgba(255,255,255,0.09)', color: 'rgba(255,255,255,0.45)', background: 'rgba(255,255,255,0.04)' }}
+        >
+          <RefreshCw className={`w-3 h-3 ${isSyncing ? 'animate-spin' : ''}`} style={{ color: isSyncing ? '#6366F1' : 'rgba(255,255,255,0.3)' }} />
+          {isSyncing ? 'Syncing…' : 'Sync'}
+        </button>
+      </div>
+      {syncError && <div className="flex items-start gap-1.5 px-3 py-2 rounded-lg text-xs" style={{ background: 'rgba(248,113,113,0.08)', border: '1px solid rgba(248,113,113,0.2)', color: '#F87171' }}><AlertCircle className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" /><span>{syncError}</span></div>}
+      {syncResult && <div className="flex items-start gap-1.5 px-3 py-2 rounded-lg text-xs" style={{ background: 'rgba(52,211,153,0.08)', border: '1px solid rgba(52,211,153,0.2)', color: '#34D399' }}><CheckCircle2 className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" /><span>{syncResult.message} ({syncResult.pages_scraped} pages, {syncResult.characters?.toLocaleString()} chars)</span></div>}
+    </div>
+  );
+};
+
+// ─── Main Component ───────────────────────────────────────────────────────────
+const AgentConfiguration = () => {
+  const [config, setConfig] = useState({
+    system_prompt: '',
+    model_name: 'gemini-2.0-flash',
+    temperature: 0.7,
+    max_tokens: 1024,
+    thinking: false,
+    rag_enabled: true,
+    selected_website_ids: [],
+  });
+
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
+  const [websites, setWebsites] = useState([]);
+  const [isLoadingWebsites, setIsLoadingWebsites] = useState(true);
+  const [showAddModal, setShowAddModal] = useState(false);
   const [testMessage, setTestMessage] = useState('');
   const [testResponse, setTestResponse] = useState(null);
   const [isTesting, setIsTesting] = useState(false);
@@ -33,514 +227,474 @@ const AgentConfiguration = () => {
     const fetchConfig = async () => {
       try {
         const data = await agentService.getConfig();
-        setConfig(data);
+        setConfig({
+          system_prompt: data.system_prompt || '',
+          model_name: data.model_name || 'gemini-2.0-flash',
+          temperature: data.temperature ?? 0.7,
+          max_tokens: data.max_tokens ?? 1024,
+          thinking: data.thinking ?? false,
+          rag_enabled: data.rag_enabled ?? true,
+          selected_website_ids: data.selected_website_ids || [],
+        });
       } catch (err) {
-        console.error('Failed to fetch config:', err);
-        if (err.response?.status !== 404) {
-          setError('Failed to load configuration. Please try again.');
-        }
-      } finally {
-        setIsLoading(false);
-      }
+        if (err.response?.status !== 404) setError('Failed to load configuration. Please try again.');
+      } finally { setIsLoading(false); }
     };
-    
-    fetchConfig();
+    const fetchWebsites = async () => {
+      try { const data = await agentService.getKnowledgeBase(); setWebsites(data); }
+      catch { /* silently ignore */ }
+      finally { setIsLoadingWebsites(false); }
+    };
+    fetchConfig(); fetchWebsites();
   }, []);
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
-    setConfig((prev) => ({
-      ...prev,
-      [name]: type === 'checkbox' ? checked : type === 'number' ? parseFloat(value) : value,
-    }));
+    setConfig((prev) => ({ ...prev, [name]: type === 'checkbox' ? checked : type === 'number' ? parseFloat(value) : value }));
+  };
+
+  const handleToggleWebsite = (id) => {
+    setConfig((prev) => {
+      const current = prev.selected_website_ids || [];
+      return { ...prev, selected_website_ids: current.includes(id) ? current.filter((x) => x !== id) : [...current, id] };
+    });
   };
 
   const handleSubmit = async (e) => {
-    e.preventDefault();
-    setError('');
-    setSuccess('');
-    setIsSaving(true);
-
+    e.preventDefault(); setError(''); setSuccess(''); setIsSaving(true);
     try {
       const savedData = await agentService.saveConfig({
-        website_url: config.website_url,
-        system_prompt: config.system_prompt,
-        model_name: config.model_name,
-        temperature: config.temperature,
-        max_tokens: config.max_tokens,
-        thinking: config.thinking
+        system_prompt: config.system_prompt, model_name: config.model_name,
+        temperature: config.temperature, max_tokens: config.max_tokens,
+        thinking: config.thinking, rag_enabled: config.rag_enabled,
+        selected_website_ids: config.selected_website_ids,
       });
-      setConfig(savedData);
-      setSuccess('Agent configuration saved successfully!');
-      
+      setConfig((prev) => ({ ...prev, ...savedData }));
+      setSuccess('Configuration saved successfully.');
       setTimeout(() => setSuccess(''), 3000);
-    } catch (err) {
-      console.error('Failed to save config:', err);
-      setError(
-        err.response?.data?.detail || 'Failed to save configuration. Please check your inputs.'
-      );
-    } finally {
-      setIsSaving(false);
-    }
+    } catch (err) { setError(err.response?.data?.detail || 'Failed to save configuration.'); }
+    finally { setIsSaving(false); }
   };
 
-  const handleSyncWebsite = async () => {
-    setSyncError('');
-    setSyncResult(null);
-    setIsSyncing(true);
-
-    try {
-      const result = await agentService.syncWebsite();
-      setSyncResult(result);
-    } catch (err) {
-      console.error('Failed to sync website:', err);
-      setSyncError(
-        err.response?.data?.detail || 'Failed to sync website.'
-      );
-    } finally {
-      setIsSyncing(false);
-    }
+  const handleAddWebsite = async (websiteUrl) => {
+    const newSite = await agentService.addWebsite(websiteUrl);
+    setWebsites((prev) => { const exists = prev.find((w) => w.id === newSite.id); return exists ? prev.map((w) => (w.id === newSite.id ? newSite : w)) : [...prev, newSite]; });
   };
+
+  const handleSyncWebsite = async (websiteUrl) => { return await agentService.syncWebsite(websiteUrl); };
 
   const handleTestAgent = async (e) => {
-    e.preventDefault();
-    if (!testMessage.trim()) return;
-
-    setTestError('');
-    setTestResponse(null);
-    setIsTesting(true);
-
+    e.preventDefault(); if (!testMessage.trim()) return;
+    setTestError(''); setTestResponse(null); setIsTesting(true);
     try {
       const result = await agentService.testAgent(testMessage);
-      setTestResponse({
-        userMessage: testMessage,
-        reply: result.reply
-      });
-      setTestMessage(''); // Clear input after sending
-    } catch (err) {
-      console.error('Test failed:', err);
-      setTestError(
-        err.response?.data?.detail || 'Failed to get a response from the agent.'
-      );
-    } finally {
-      setIsTesting(false);
-    }
+      setTestResponse({ userMessage: testMessage, reply: result.reply });
+      setTestMessage('');
+    } catch (err) { setTestError(err.response?.data?.detail || 'Failed to get a response from the agent.'); }
+    finally { setIsTesting(false); }
   };
 
   if (isLoading) {
     return (
       <div className="flex justify-center items-center h-64">
-        <Loader2 className="w-8 h-8 text-blue-500 animate-spin" />
+        <Loader2 className="w-6 h-6 animate-spin" style={{ color: 'var(--accent)' }} />
       </div>
     );
   }
 
   return (
-    <div className="max-w-4xl mx-auto space-y-8 animate-in fade-in duration-500 pb-12">
-      {/* Configuration Header */}
-      <div className="flex items-center space-x-3 mb-4">
-        <div className="p-2 bg-blue-100 text-blue-600 rounded-lg">
-          <Settings2 className="w-6 h-6" />
-        </div>
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900">Agent Configuration</h1>
-          <p className="text-slate-500">Configure your AI chatbot's behavior and models.</p>
-        </div>
+    <div className="max-w-4xl mx-auto pb-16 animate-fade-up">
+
+      {/* Page header */}
+      <div className="mb-10 text-center">
+        <h1 className="text-3xl font-semibold tracking-tight" style={{ color: 'var(--text)', letterSpacing: '-0.02em' }}>Agent Configuration</h1>
+        <p className="mt-1.5 text-sm max-w-xl mx-auto" style={{ color: 'var(--text-muted)' }}>
+
+        </p>
       </div>
 
-      {/* Configuration Form */}
-      <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
-        <div className="p-6 sm:p-8">
-          <form onSubmit={handleSubmit} className="space-y-6">
-            
-            {error && (
-              <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-xl flex items-start">
-                <AlertCircle className="w-5 h-5 mr-2 mt-0.5 flex-shrink-0" />
-                <span>{error}</span>
-              </div>
-            )}
-            
-            {success && (
-              <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-xl flex items-start">
-                <CheckCircle2 className="w-5 h-5 mr-2 mt-0.5 flex-shrink-0" />
-                <span>{success}</span>
-              </div>
-            )}
+      <form onSubmit={handleSubmit} className="space-y-4">
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div className="md:col-span-2">
-                <label htmlFor="website_url" className="block text-sm font-medium text-slate-700 mb-1">
-                  Website URL
-                </label>
-                <input
-                  type="url"
-                  id="website_url"
-                  name="website_url"
-                  value={config.website_url || ''}
-                  onChange={handleChange}
-                  placeholder="https://yourwebsite.com"
-                  className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
-                />
-                <div className="mt-2 flex items-center justify-between">
-                  <p className="text-xs text-slate-500">Where the chatbot will be deployed.</p>
-                  
-                  {config.website_url && (
-                    <button
-                      type="button"
-                      onClick={handleSyncWebsite}
-                      disabled={isSyncing}
-                      className="inline-flex items-center px-3 py-1.5 border border-slate-200 rounded-lg shadow-sm text-xs font-medium text-slate-700 bg-white hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-70 disabled:cursor-not-allowed transition-all"
+        {/* Alerts */}
+        {error && (
+          <div className="flex items-start gap-2.5 px-4 py-3 rounded-xl text-sm" style={{ background: 'rgba(248,113,113,0.08)', border: '1px solid rgba(248,113,113,0.2)', color: '#F87171' }}>
+            <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" /><span>{error}</span>
+          </div>
+        )}
+        {success && (
+          <div className="flex items-start gap-2.5 px-4 py-3 rounded-xl text-sm" style={{ background: 'rgba(52,211,153,0.08)', border: '1px solid rgba(52,211,153,0.2)', color: '#34D399' }}>
+            <CheckCircle2 className="w-4 h-4 mt-0.5 flex-shrink-0" /><span>{success}</span>
+          </div>
+        )}
+
+        {/* ── System Prompt ────────────────────────────────────────── */}
+        <SectionCard icon={MessageSquare} title="System Prompt" accentColor="#9B8DF8">
+          <textarea
+            id="system_prompt"
+            name="system_prompt"
+            required
+            rows={7}
+            value={config.system_prompt}
+            onChange={handleChange}
+            placeholder="You are a helpful customer support agent for…"
+            className="w-full px-4 py-3 rounded-xl text-sm outline-none transition-all resize-y font-mono"
+            style={{ ...glassInput, minHeight: '140px', lineHeight: 1.7 }}
+            onFocus={onFocus}
+            onBlur={onBlur}
+          />
+        </SectionCard>
+
+        {/* ── AI Models ──────────────────────────────────────────────────── */}
+        <SectionCard icon={Settings2} title="AI Model" subtitle="Select the Gemini model powering your agent." accentColor="#6366F1">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mb-4">
+            {MODELS.map((model) => {
+              const isSelected = config.model_name === model.id;
+              return (
+                <button
+                  key={model.id}
+                  type="button"
+                  disabled={model.deprecated}
+                  title={model.deprecated ? 'This model is no longer available for new Gemini API users.' : undefined}
+                  onClick={() => !model.deprecated && setConfig((prev) => ({ ...prev, model_name: model.id }))}
+                  className="relative text-left p-4.5 rounded-xl transition-all duration-200 focus:outline-none"
+                  style={{
+                    background: model.deprecated
+                      ? 'rgba(255,255,255,0.02)'
+                      : isSelected
+                        ? 'rgba(99,102,241,0.12)'
+                        : 'rgba(255,255,255,0.03)',
+                    border: model.deprecated
+                      ? '1px solid rgba(255,255,255,0.05)'
+                      : isSelected
+                        ? '1px solid rgba(99,102,241,0.5)'
+                        : '1px solid rgba(255,255,255,0.07)',
+                    opacity: model.deprecated ? 0.38 : 1,
+                    cursor: model.deprecated ? 'not-allowed' : 'pointer',
+                    boxShadow: isSelected ? '0 0 16px rgba(99,102,241,0.12) inset' : 'none',
+                    backdropFilter: 'blur(8px)',
+                    transform: 'translateY(0)',
+                    transition: 'all 180ms ease',
+                  }}
+                  onMouseEnter={(e) => {
+                    if (!model.deprecated && !isSelected) {
+                      e.currentTarget.style.background = 'rgba(255,255,255,0.06)';
+                      e.currentTarget.style.borderColor = 'rgba(255,255,255,0.12)';
+                      e.currentTarget.style.transform = 'translateY(-1px)';
+                    }
+                  }}
+                  onMouseLeave={(e) => {
+                    if (!model.deprecated && !isSelected) {
+                      e.currentTarget.style.background = 'rgba(255,255,255,0.03)';
+                      e.currentTarget.style.borderColor = 'rgba(255,255,255,0.07)';
+                      e.currentTarget.style.transform = 'translateY(0)';
+                    }
+                  }}
+                >
+                  {/* Deprecated badge */}
+                  {model.deprecated && (
+                    <span
+                      className="absolute top-4 right-4 px-1.5 py-0.5 rounded text-[10px] font-medium"
+                      style={{ background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.3)' }}
                     >
-                      {isSyncing ? (
-                        <>
-                          <RefreshCw className="animate-spin -ml-0.5 mr-1.5 h-3.5 w-3.5 text-blue-500" />
-                          Syncing...
-                        </>
-                      ) : (
-                        <>
-                          <Globe className="-ml-0.5 mr-1.5 h-3.5 w-3.5 text-slate-400" />
-                          Sync Website
-                        </>
-                      )}
-                    </button>
+                      Deprecated
+                    </span>
                   )}
-                </div>
 
-                {syncError && (
-                  <div className="mt-3 bg-red-50 border border-red-200 text-red-700 px-3 py-2 rounded-lg flex items-start text-sm">
-                    <AlertCircle className="w-4 h-4 mr-2 mt-0.5 flex-shrink-0" />
-                    <span>{syncError}</span>
-                  </div>
-                )}
-
-                {syncResult && (
-                  <div className="mt-3 bg-blue-50 border border-blue-200 text-blue-800 px-4 py-3 rounded-lg text-sm">
-                    <div className="flex items-center font-medium mb-1">
-                      <CheckCircle2 className="w-4 h-4 mr-1.5 text-blue-600" />
-                      {syncResult.message}
-                    </div>
-                    <div className="text-blue-700 mt-2 space-y-1 ml-5">
-                      <p><span className="opacity-80">Website:</span> <a href={syncResult.website_url} target="_blank" rel="noreferrer" className="underline">{syncResult.website_url}</a></p>
-                      <p><span className="opacity-80">Characters Indexed:</span> {syncResult.characters.toLocaleString()}</p>
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              <div className="md:col-span-2">
-                <label htmlFor="system_prompt" className="block text-sm font-medium text-slate-700 mb-1">
-                  System Prompt <span className="text-red-500">*</span>
-                </label>
-                <textarea
-                  id="system_prompt"
-                  name="system_prompt"
-                  required
-                  rows={8}
-                  value={config.system_prompt}
-                  onChange={handleChange}
-                  placeholder="You are a helpful customer support agent for..."
-                  className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors resize-y font-mono text-sm"
-                />
-                <p className="mt-1 text-xs text-slate-500">Defines the chatbot's persona, instructions, and rules.</p>
-              </div>
-
-              <div className="md:col-span-2">
-                <label className="block text-sm font-medium text-slate-700 mb-3">
-                  AI Model <span className="text-red-500">*</span>
-                </label>
-
-                {/* Model Cards Grid */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                  {[
-                    {
-                      id: 'gemini-2.5-pro',
-                      name: 'Gemini 2.5 Pro',
-                      tier: 'Pro',
-                      tierColor: 'bg-violet-100 text-violet-700',
-                      badge: 'Most Intelligent',
-                      badgeColor: 'bg-violet-600',
-                      description: 'State-of-the-art reasoning and multimodal understanding.',
-                      caps: ['Deep reasoning', 'Long context 1M', 'Code expert'],
-                      icon: '🧠',
-                    },
-                    {
-                      id: 'gemini-2.5-flash',
-                      name: 'Gemini 2.5 Flash',
-                      tier: 'Flash',
-                      tierColor: 'bg-blue-100 text-blue-700',
-                      badge: 'Recommended',
-                      badgeColor: 'bg-blue-600',
-                      description: 'Best balance of intelligence and speed for most use cases.',
-                      caps: ['Fast responses', 'Smart reasoning', 'Cost efficient'],
-                      icon: '⚡',
-                    },
-                    {
-                      id: 'gemini-2.0-flash',
-                      name: 'Gemini 2.0 Flash',
-                      tier: 'Flash',
-                      tierColor: 'bg-blue-100 text-blue-700',
-                      badge: null,
-                      description: 'Next-gen multimodal model built for the agentic era.',
-                      caps: ['Agentic tasks', 'Multimodal', 'Low latency'],
-                      icon: '🚀',
-                    },
-                    {
-                      id: 'gemini-2.0-flash-lite',
-                      name: 'Gemini 2.0 Flash Lite',
-                      tier: 'Lite',
-                      tierColor: 'bg-green-100 text-green-700',
-                      badge: 'Fastest',
-                      badgeColor: 'bg-green-600',
-                      description: 'Ultra-fast and lightweight — perfect for high-volume chats.',
-                      caps: ['Lowest latency', 'High throughput', 'Cost efficient'],
-                      icon: '💨',
-                    },
-                    {
-                      id: 'gemini-1.5-pro',
-                      name: 'Gemini 1.5 Pro',
-                      tier: 'Pro',
-                      tierColor: 'bg-violet-100 text-violet-700',
-                      badge: null,
-                      description: 'Advanced capabilities with a 2M token context window.',
-                      caps: ['2M context', 'Complex tasks', 'Multimodal'],
-                      icon: '🔮',
-                    },
-                    {
-                      id: 'gemini-1.5-flash',
-                      name: 'Gemini 1.5 Flash',
-                      tier: 'Flash',
-                      tierColor: 'bg-blue-100 text-blue-700',
-                      badge: null,
-                      description: 'Reliable and fast — a proven model for production chatbots.',
-                      caps: ['1M context', 'Reliable', 'Well-tested'],
-                      icon: '✨',
-                    },
-                    {
-                      id: 'gemini-3.1-flash-lite',
-                      name: 'Gemini 3.1 Flash Lite',
-                      tier: 'Lite',
-                      tierColor: 'bg-green-100 text-green-700',
-                      badge: 'New',
-                      badgeColor: 'bg-emerald-600',
-                      description: 'Latest lightweight model — ultra-efficient for high-volume tasks.',
-                      caps: ['Ultra-fast', 'Low cost', 'High volume'],
-                      icon: '🌟',
-                    },
-                  ].map((model) => (
-                    <button
-                      key={model.id}
-                      type="button"
-                      onClick={() => setConfig(prev => ({ ...prev, model_name: model.id }))}
-                      className={`relative text-left p-4 rounded-xl border-2 transition-all duration-200 focus:outline-none ${
-                        config.model_name === model.id
-                          ? 'border-blue-500 bg-blue-50 shadow-md shadow-blue-100'
-                          : 'border-slate-200 bg-white hover:border-slate-300 hover:shadow-sm'
-                      }`}
+                  {/* Selected dot */}
+                  {!model.deprecated && isSelected && (
+                    <span
+                      className="absolute top-4 right-4 w-4 h-4 rounded-full flex items-center justify-center"
+                      style={{ background: '#6366F1' }}
                     >
-                      {/* Selected ring indicator */}
-                      {config.model_name === model.id && (
-                        <span className="absolute top-3 right-3 w-4 h-4 bg-blue-500 rounded-full flex items-center justify-center">
-                          <svg className="w-2.5 h-2.5 text-white" fill="currentColor" viewBox="0 0 20 20">
-                            <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd"/>
-                          </svg>
-                        </span>
-                      )}
+                      <svg className="w-2.5 h-2.5 text-white" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                      </svg>
+                    </span>
+                  )}
 
-                      {/* Badge */}
-                      {model.badge && (
-                        <span className={`inline-block mb-2 px-2 py-0.5 rounded-full text-xs font-semibold text-white ${model.badgeColor}`}>
-                          {model.badge}
-                        </span>
-                      )}
+                  {/* Badge */}
+                  {!model.deprecated && model.badge ? (
+                    <span
+                      className="inline-block mb-2.5 px-2 py-0.5 rounded-full text-[10px] font-semibold text-white"
+                      style={{ background: model.badgeColor + 'CC' }}
+                    >
+                      {model.badge}
+                    </span>
+                  ) : (
+                    <div className="mb-2.5 h-[18px]" />
+                  )}
 
-                      {/* Icon + Name */}
-                      <div className="flex items-center gap-2 mb-1">
-                        <span className="text-xl">{model.icon}</span>
-                        <div>
-                          <p className="font-semibold text-slate-800 text-sm leading-tight">{model.name}</p>
-                          <span className={`inline-block px-1.5 py-0.5 rounded text-xs font-medium ${model.tierColor}`}>
-                            {model.tier}
-                          </span>
-                        </div>
-                      </div>
+                  <p className="text-sm font-semibold leading-tight mb-1" style={{ color: model.deprecated ? 'rgba(255,255,255,0.3)' : '#F1F5F9' }}>
+                    {model.name}
+                  </p>
+                  <span
+                    className="inline-block text-[10px] font-medium px-1.5 py-0.5 rounded mb-2"
+                    style={{ background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.3)' }}
+                  >
+                    {model.tier}
+                  </span>
+                  <p className="text-xs leading-relaxed mb-2.5" style={{ color: 'rgba(255,255,255,0.3)' }}>{model.description}</p>
+                  <div className="flex flex-wrap gap-1">
+                    {model.caps.map((cap) => (
+                      <span key={cap} className="px-1.5 py-0.5 rounded text-[10px]" style={{ background: 'rgba(255,255,255,0.04)', color: 'rgba(255,255,255,0.28)' }}>
+                        {cap}
+                      </span>
+                    ))}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
 
-                      {/* Description */}
-                      <p className="text-xs text-slate-500 leading-relaxed mb-2">{model.description}</p>
+        </SectionCard>
 
-                      {/* Capability Tags */}
-                      <div className="flex flex-wrap gap-1">
-                        {model.caps.map(cap => (
-                          <span key={cap} className="px-1.5 py-0.5 bg-slate-100 text-slate-600 rounded text-xs">
-                            {cap}
-                          </span>
-                        ))}
-                      </div>
-                    </button>
-                  ))}
-                </div>
-
-                <p className="mt-2 text-xs text-slate-500">
-                  Selected: <code className="bg-slate-100 px-1.5 py-0.5 rounded font-mono">{config.model_name}</code>
-                </p>
-              </div>
-
-
-              <div>
-                <label htmlFor="max_tokens" className="block text-sm font-medium text-slate-700 mb-1">
-                  Max Tokens
-                </label>
-                <input
-                  type="number"
-                  id="max_tokens"
-                  name="max_tokens"
-                  min="1"
-                  step="1"
-                  value={config.max_tokens}
-                  onChange={handleChange}
-                  className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
-                />
-              </div>
-
-              <div>
-                <label htmlFor="temperature" className="block text-sm font-medium text-slate-700 mb-1">
-                  Temperature ({config.temperature})
-                </label>
-                <input
-                  type="range"
-                  id="temperature"
-                  name="temperature"
-                  min="0"
-                  max="2"
-                  step="0.1"
-                  value={config.temperature}
-                  onChange={handleChange}
-                  className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
-                />
-                <div className="flex justify-between text-xs text-slate-500 mt-1">
-                  <span>Precise</span>
-                  <span>Creative</span>
-                </div>
-              </div>
-
-              <div className="flex items-center space-x-3 pt-6">
-                <div className="flex items-center h-5">
+        {/* ── General Settings ───────────────────────────────────────────── */}
+        <div className="my-8">
+          <SectionCard icon={Settings2} title="General Settings" accentColor="#F59E0B">
+            <div className="space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                  <Label htmlFor="max_tokens">Max Tokens</Label>
                   <input
-                    id="thinking"
-                    name="thinking"
-                    type="checkbox"
-                    checked={config.thinking}
+                    type="number"
+                    id="max_tokens"
+                    name="max_tokens"
+                    min="1"
+                    step="1"
+                    value={config.max_tokens}
                     onChange={handleChange}
-                    className="w-5 h-5 text-blue-600 bg-slate-50 border-slate-300 rounded focus:ring-blue-500 cursor-pointer"
+                    className="w-full px-4 py-3 rounded-xl text-sm outline-none transition-all"
+                    style={glassInput}
+                    onFocus={onFocus}
+                    onBlur={onBlur}
                   />
                 </div>
-                <div className="text-sm">
-                  <label htmlFor="thinking" className="font-medium text-slate-700 cursor-pointer">
-                    Enable Thinking Mode
-                  </label>
-                  <p className="text-slate-500 text-xs">Allow the model to reason before responding.</p>
+                <div>
+                  <Label htmlFor="temperature">
+                    Temperature — <span style={{ color: '#F1F5F9', fontWeight: 600 }}>{config.temperature}</span>
+                  </Label>
+                  <input
+                    type="range"
+                    id="temperature"
+                    name="temperature"
+                    min="0"
+                    max="2"
+                    step="0.1"
+                    value={config.temperature}
+                    onChange={handleChange}
+                    className="w-full h-1.5 rounded-full appearance-none cursor-pointer mt-3.5"
+                    style={{ accentColor: '#6366F1', background: 'rgba(255,255,255,0.08)' }}
+                  />
+                  <div className="flex justify-between mt-2">
+                    <span className="text-xs" style={{ color: 'rgba(255,255,255,0.28)' }}>Precise</span>
+                    <span className="text-xs" style={{ color: 'rgba(255,255,255,0.28)' }}>Creative</span>
+                  </div>
                 </div>
               </div>
-            </div>
 
-            <div className="pt-6 border-t border-slate-100 flex justify-end">
-              <button
-                type="submit"
-                disabled={isSaving}
-                className="inline-flex items-center px-6 py-2.5 border border-transparent rounded-xl shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-70 disabled:cursor-not-allowed transition-all"
-              >
-                {isSaving ? (
-                  <>
-                    <Loader2 className="animate-spin -ml-1 mr-2 h-4 w-4" />
-                    Saving...
-                  </>
-                ) : (
-                  <>
-                    <Save className="-ml-1 mr-2 h-4 w-4" />
-                    Save Configuration
-                  </>
-                )}
-              </button>
+              {/* RAG & Thinking Mode Toggles */}
+              <div className="pt-5 border-t border-white/10 space-y-5">
+                {[
+                  { id: 'rag_enabled', label: 'RAG Enabled', desc: 'When enabled, the agent searches selected knowledge sources before answering.' },
+                  { id: 'thinking', label: 'Enable Thinking Mode', desc: 'Allow the model to reason step-by-step before responding.' },
+                ].map((toggle) => (
+                  <div key={toggle.id} className="flex items-start gap-4">
+                    {/* Toggle switch */}
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={config[toggle.id]}
+                      onClick={() => setConfig((prev) => ({ ...prev, [toggle.id]: !prev[toggle.id] }))}
+                      className="mt-0.5 flex-shrink-0 relative w-9 h-5 rounded-full transition-colors duration-200 focus:outline-none"
+                      style={{
+                        background: config[toggle.id] ? '#6366F1' : 'rgba(255,255,255,0.1)',
+                        border: '1px solid rgba(255,255,255,0.12)',
+                      }}
+                    >
+                      <span
+                        className="absolute w-3.5 h-3.5 rounded-full bg-white transition-transform duration-200"
+                        style={{
+                          top: '2px',
+                          left: '2px',
+                          transform: config[toggle.id] ? 'translateX(16px)' : 'translateX(0)',
+                          boxShadow: '0 1px 4px rgba(0,0,0,0.3)',
+                        }}
+                      />
+                    </button>
+                    <div>
+                      <p className="text-sm font-medium" style={{ color: '#F1F5F9' }}>{toggle.label}</p>
+                      <p className="text-xs mt-0.5" style={{ color: 'rgba(255,255,255,0.32)' }}>{toggle.desc}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
-          </form>
-        </div>
-      </div>
-      
-      {/* Test Area Phase 5 */}
-      <div className="mt-12 pt-8 border-t-2 border-dashed border-slate-200">
-        <div className="flex items-center space-x-3 mb-6">
-          <div className="p-2 bg-purple-100 text-purple-600 rounded-lg">
-            <MessageSquare className="w-6 h-6" />
-          </div>
-          <div>
-            <h2 className="text-2xl font-bold text-slate-900">Chat Preview</h2>
-            <p className="text-slate-500">Test your agent's responses based on the saved configuration.</p>
-          </div>
+          </SectionCard>
         </div>
 
-        <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden flex flex-col min-h-[300px]">
-          
-          <div className="flex-1 p-6 bg-slate-50 flex flex-col gap-4 overflow-y-auto">
+        {/* ── Knowledge Base ─────────────────────────────────────────────── */}
+        <SectionCard
+          icon={Database}
+          title="Knowledge Base"
+          subtitle="Websites scraped and indexed for retrieval."
+          accentColor="#14B8A6"
+          action={
+            <button
+              type="button"
+              id="add-website-btn"
+              onClick={() => setShowAddModal(true)}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-white transition-all"
+              style={{ background: 'linear-gradient(135deg, #6366F1, #8B5CF6)', boxShadow: '0 2px 10px rgba(99,102,241,0.2)' }}
+            >
+              <Plus className="w-3.5 h-3.5" /> Add Website
+            </button>
+          }
+        >
+          {isLoadingWebsites ? (
+            <div className="flex items-center gap-2 text-sm py-2" style={{ color: 'rgba(255,255,255,0.3)' }}>
+              <Loader2 className="w-4 h-4 animate-spin" />Loading…
+            </div>
+          ) : websites.length === 0 ? (
+            <div className="py-10 rounded-xl flex flex-col items-center justify-center text-center gap-2.5" style={{ border: '1px dashed rgba(255,255,255,0.08)' }}>
+              <Globe className="w-7 h-7" style={{ color: 'rgba(255,255,255,0.18)' }} />
+              <p className="text-sm" style={{ color: 'rgba(255,255,255,0.3)' }}>
+                No websites added yet.{' '}
+                <button type="button" onClick={() => setShowAddModal(true)} className="font-medium underline" style={{ color: '#818CF8' }}>
+                  Add one
+                </button>{' '}
+                to get started.
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {websites.map((site) => <WebsiteRow key={site.id} website={site} onSync={handleSyncWebsite} />)}
+            </div>
+          )}
+        </SectionCard>
+
+        {/* ── Knowledge Sources ──────────────────────────────────────────── */}
+        {websites.length > 0 && (
+          <SectionCard icon={Globe} title="Knowledge Sources" subtitle="Select which websites the agent searches during conversations." accentColor="#6366F1">
+            <div className="space-y-2">
+              {websites.map((site) => {
+                const isChecked = (config.selected_website_ids || []).includes(site.id);
+                return (
+                  <label
+                    key={site.id}
+                    htmlFor={`kb-${site.id}`}
+                    className="flex items-center gap-3 px-4 py-3 rounded-xl cursor-pointer transition-all"
+                    style={{
+                      background: isChecked ? 'rgba(99,102,241,0.1)' : 'rgba(255,255,255,0.02)',
+                      border: `1px solid ${isChecked ? 'rgba(99,102,241,0.35)' : 'rgba(255,255,255,0.07)'}`,
+                    }}
+                  >
+                    <input
+                      id={`kb-${site.id}`}
+                      type="checkbox"
+                      checked={isChecked}
+                      onChange={() => handleToggleWebsite(site.id)}
+                      className="w-4 h-4 rounded cursor-pointer"
+                      style={{ accentColor: '#6366F1' }}
+                    />
+                    <Globe className="w-3.5 h-3.5 flex-shrink-0" style={{ color: isChecked ? '#818CF8' : 'rgba(255,255,255,0.28)' }} />
+                    <span className="text-sm font-mono truncate" style={{ color: isChecked ? '#E2E8F0' : 'rgba(255,255,255,0.45)' }}>
+                      {site.website_url}
+                    </span>
+                  </label>
+                );
+              })}
+            </div>
+          </SectionCard>
+        )}
+
+        {/* ── Save ───────────────────────────────────────────────────────── */}
+        <div className="flex justify-end pt-2">
+          <button
+            type="submit"
+            disabled={isSaving}
+            className="inline-flex items-center gap-2 px-6 py-3 rounded-xl text-sm font-semibold text-white transition-all duration-200 disabled:opacity-60"
+            style={{
+              background: 'linear-gradient(135deg, #6366F1, #8B5CF6)',
+              boxShadow: '0 4px 18px rgba(99,102,241,0.28)',
+            }}
+            onMouseEnter={(e) => { if (!isSaving) e.currentTarget.style.boxShadow = '0 6px 22px rgba(99,102,241,0.38)'; }}
+            onMouseLeave={(e) => { e.currentTarget.style.boxShadow = '0 4px 18px rgba(99,102,241,0.28)'; }}
+          >
+            {isSaving ? <><Loader2 className="w-4 h-4 animate-spin" />Saving…</> : <><Save className="w-4 h-4" />Save Configuration</>}
+          </button>
+        </div>
+      </form>
+
+      {/* ── Chat Preview ───────────────────────────────────────────────── */}
+      <div className="mt-10">
+        <div className="mb-5">
+          <h2 className="text-lg font-semibold" style={{ color: '#F1F5F9' }}>Chat Preview</h2>
+          <p className="text-sm mt-0.5" style={{ color: 'rgba(255,255,255,0.38)' }}>Test your agent's responses based on the saved configuration.</p>
+        </div>
+
+        <div className="glass rounded-2xl overflow-hidden flex flex-col" style={{ minHeight: '300px', boxShadow: 'var(--shadow-md)' }}>
+          <div className="flex-1 p-6 flex flex-col gap-4 overflow-y-auto" style={{ background: 'rgba(0,0,0,0.25)' }}>
             {!testResponse && !isTesting && !testError && (
-              <div className="flex-1 flex flex-col items-center justify-center text-slate-400 py-12">
-                <MessageSquare className="w-12 h-12 mb-3 opacity-20" />
-                <p>Send a message to test the agent</p>
+              <div className="flex-1 flex flex-col items-center justify-center py-12" style={{ color: 'rgba(255,255,255,0.2)' }}>
+                <MessageSquare className="w-8 h-8 mb-3 opacity-50" />
+                <p className="text-sm">Send a message to test the agent</p>
               </div>
             )}
-
             {testResponse && (
               <>
                 <div className="flex justify-end">
-                  <div className="bg-blue-600 text-white px-5 py-3 rounded-2xl rounded-tr-sm max-w-[80%] shadow-sm">
+                  <div className="px-4 py-3 rounded-2xl rounded-tr-sm max-w-[80%] text-sm text-white" style={{ background: 'linear-gradient(135deg, #6366F1, #8B5CF6)' }}>
                     <p className="whitespace-pre-wrap">{testResponse.userMessage}</p>
                   </div>
                 </div>
                 <div className="flex justify-start">
-                  <div className="bg-white border border-slate-200 text-slate-800 px-5 py-3 rounded-2xl rounded-tl-sm max-w-[85%] shadow-sm prose prose-sm">
+                  <div className="px-4 py-3 rounded-2xl rounded-tl-sm max-w-[85%] text-sm" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)', color: '#E2E8F0' }}>
                     <p className="whitespace-pre-wrap leading-relaxed">{testResponse.reply}</p>
                   </div>
                 </div>
               </>
             )}
-
             {isTesting && (
               <div className="flex justify-start">
-                <div className="bg-white border border-slate-200 text-slate-800 px-5 py-4 rounded-2xl rounded-tl-sm shadow-sm flex space-x-2 items-center">
-                  <div className="w-2 h-2 bg-slate-400 rounded-full animate-bounce"></div>
-                  <div className="w-2 h-2 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
-                  <div className="w-2 h-2 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
+                <div className="px-4 py-3.5 rounded-2xl rounded-tl-sm flex gap-1.5 items-center" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)' }}>
+                  {[0, 150, 300].map((delay) => (
+                    <div key={delay} className="w-1.5 h-1.5 rounded-full" style={{ background: 'rgba(255,255,255,0.3)', animation: `dotBounce 1s ease ${delay}ms infinite` }} />
+                  ))}
                 </div>
               </div>
             )}
-
             {testError && (
-              <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-xl flex items-start self-center my-4">
-                <AlertCircle className="w-5 h-5 mr-2 mt-0.5 flex-shrink-0" />
-                <span>{testError}</span>
-              </div>
+              <div className="px-4 py-3 rounded-xl text-sm self-center" style={{ background: 'rgba(248,113,113,0.08)', border: '1px solid rgba(248,113,113,0.2)', color: '#F87171' }}>{testError}</div>
             )}
           </div>
 
-          <div className="p-4 bg-white border-t border-slate-200">
+          <div className="p-4" style={{ borderTop: '1px solid rgba(255,255,255,0.07)', background: 'rgba(0,0,0,0.2)' }}>
             <form onSubmit={handleTestAgent} className="relative">
               <input
                 type="text"
                 value={testMessage}
                 onChange={(e) => setTestMessage(e.target.value)}
-                placeholder="Ask your agent something..."
+                placeholder="Ask your agent something…"
                 disabled={isTesting}
-                className="w-full pl-5 pr-14 py-4 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-colors outline-none disabled:opacity-70 disabled:cursor-not-allowed"
+                className="w-full pl-5 pr-14 py-3 rounded-xl text-sm outline-none transition-all"
+                style={glassInput}
+                onFocus={onFocus}
+                onBlur={onBlur}
               />
               <button
                 type="submit"
                 disabled={!testMessage.trim() || isTesting}
-                className="absolute right-2 top-2 bottom-2 aspect-square flex items-center justify-center bg-purple-600 text-white rounded-lg hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                className="absolute right-2 top-2 bottom-2 aspect-square flex items-center justify-center rounded-lg text-white transition-all disabled:opacity-40"
+                style={{ background: 'linear-gradient(135deg, #6366F1, #8B5CF6)' }}
               >
-                <Send className="w-4 h-4 ml-0.5" />
+                <Send className="w-4 h-4" />
               </button>
             </form>
           </div>
         </div>
       </div>
+
+      {showAddModal && <AddWebsiteModal onClose={() => setShowAddModal(false)} onAdd={handleAddWebsite} />}
     </div>
   );
 };

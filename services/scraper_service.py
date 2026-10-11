@@ -3,7 +3,6 @@ from bs4 import BeautifulSoup
 from sqlalchemy.orm import Session
 from urllib.parse import urljoin, urlparse
 
-from models import AgentConfiguration
 from crud import save_website_content
 
 
@@ -34,9 +33,17 @@ def scrape_website(url: str):
         for tag in soup(["script", "style", "noscript"]):
             tag.decompose()
 
-        text = soup.get_text(separator=" ")
+        # Preserve headings and paragraphs
+        text = soup.get_text(separator="\n")
 
-        clean_text = " ".join(text.split())
+        # Remove empty lines while keeping structure
+        lines = [
+            line.strip()
+            for line in text.splitlines()
+            if line.strip()
+        ]
+
+        clean_text = "\n".join(lines)
 
         return clean_text
 
@@ -166,31 +173,23 @@ def get_internal_links(url: str):
         raise Exception(f"Error fetching links: {e}")
 
 
-def sync_website(db: Session, admin_id: int):
+def sync_website(db: Session, admin_id: int, website_url: str):
     """
-    Scrapes multiple pages of the configured website
-    and stores the combined content.
+    Scrapes multiple pages of the given website URL and stores
+    the combined content in WebsiteContent.
+
+    website_url is now passed directly as a parameter — the function
+    no longer reads from AgentConfiguration.
     """
 
-    config = (
-        db.query(AgentConfiguration)
-        .filter(
-            AgentConfiguration.admin_id == admin_id
-        )
-        .first()
-    )
-
-    if not config:
-        raise Exception("Agent configuration not found.")
-
-    if not config.website_url:
+    if not website_url:
         raise Exception("Website URL is empty.")
 
     # ---------------------------------
     # Get all internal links
     # ---------------------------------
 
-    links = get_internal_links(config.website_url)
+    links = get_internal_links(website_url)
 
     print("\n========== INTERNAL LINKS ==========")
 
@@ -238,13 +237,13 @@ def sync_website(db: Session, admin_id: int):
     save_website_content(
         db=db,
         admin_id=admin_id,
-        website_url=config.website_url,
+        website_url=website_url,
         content=combined_content
     )
 
     return {
         "message": "Website synced successfully.",
-        "website_url": config.website_url,
+        "website_url": website_url,
         "pages_scraped": len(links),
         "characters": len(combined_content)
     }

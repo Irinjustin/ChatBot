@@ -1,25 +1,46 @@
 import React from "react";
 import { MessageSquare, X } from "lucide-react";
 
-export default function FloatingChatButton({ isOpen, onClick, unreadCount = 0 }) {
+export default function FloatingChatButton({ isOpen, onClick }) {
   return (
     <button
       onClick={onClick}
       aria-label={isOpen ? "Close Chat" : "Open Chat"}
-      className="fixed bottom-6 right-6 z-50 flex items-center justify-center w-14 h-14 rounded-full bg-indigo-600 text-white shadow-xl shadow-indigo-950/50 hover:bg-indigo-500 hover:scale-105 active:scale-95 transition-all duration-300 focus:outline-none focus:ring-4 focus:ring-indigo-500/30 border border-indigo-400/20"
+      style={{
+        position: 'fixed',
+        bottom: '28px',
+        right: '28px',
+        zIndex: 50,
+        width: '54px',
+        height: '54px',
+        borderRadius: '50%',
+        background: 'linear-gradient(135deg, #7C6AF5, #9B8DF8)',
+        color: '#fff',
+        border: '1px solid rgba(255,255,255,0.15)',
+        boxShadow: '0 8px 28px rgba(124,106,245,0.35), 0 2px 8px rgba(0,0,0,0.4)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        cursor: 'pointer',
+        transition: 'transform 180ms cubic-bezier(0.34,1.2,0.64,1), box-shadow 180ms ease',
+        outline: 'none',
+      }}
+      onMouseEnter={(e) => {
+        e.currentTarget.style.transform = 'scale(1.07)';
+        e.currentTarget.style.boxShadow = '0 10px 32px rgba(124,106,245,0.45), 0 2px 8px rgba(0,0,0,0.4)';
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.transform = 'scale(1)';
+        e.currentTarget.style.boxShadow = '0 8px 28px rgba(124,106,245,0.35), 0 2px 8px rgba(0,0,0,0.4)';
+      }}
+      onMouseDown={(e) => { e.currentTarget.style.transform = 'scale(0.95)'; }}
+      onMouseUp={(e) => { e.currentTarget.style.transform = 'scale(1.07)'; }}
     >
-      <div className="relative flex items-center justify-center">
-        {isOpen ? (
-          <X className="w-6 h-6 transition-transform duration-300 rotate-0 hover:rotate-90" />
-        ) : (
-          <MessageSquare className="w-6 h-6 transition-transform duration-300" />
-        )}
-
-        {!isOpen && unreadCount > 0 && (
-          <span className="absolute -top-2 -right-2 bg-red-500 text-white text-xs font-bold w-5 h-5 rounded-full flex items-center justify-center border-2 border-slate-900 animate-bounce">
-            {unreadCount}
-          </span>
-        )}
+      <div style={{ transition: 'transform 220ms ease', transform: isOpen ? 'rotate(90deg)' : 'rotate(0deg)', display: 'flex' }}>
+        {isOpen
+          ? <X style={{ width: '21px', height: '21px' }} />
+          : <MessageSquare style={{ width: '21px', height: '21px' }} />
+        }
       </div>
     </button>
   );

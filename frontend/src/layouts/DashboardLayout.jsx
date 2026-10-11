@@ -1,23 +1,26 @@
 import { useState } from 'react';
 import { Outlet } from 'react-router-dom';
-import Sidebar from '../components/Sidebar';
-import Header from '../components/Header';
+import TopNav from '../components/TopNav';
 
 const DashboardLayout = () => {
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-
   return (
-    <div className="flex h-screen bg-slate-50 font-sans overflow-hidden">
-      <Sidebar mobileMenuOpen={mobileMenuOpen} setMobileMenuOpen={setMobileMenuOpen} />
-      
-      <div className="flex-1 flex flex-col h-screen overflow-hidden">
-        <Header toggleMobileMenu={() => setMobileMenuOpen(!mobileMenuOpen)} />
-        
-        <main className="flex-1 overflow-x-hidden overflow-y-auto bg-slate-50 p-4 sm:p-6 lg:p-8">
-          <Outlet />
+    <>
+      {/* Fixed ambient background canvas */}
+      <div className="ambient-bg" aria-hidden="true">
+        <div className="ambient-teal" />
+      </div>
+
+      {/* App shell */}
+      <div className="flex flex-col h-screen overflow-hidden relative" style={{ zIndex: 1 }}>
+        <TopNav />
+
+        <main className="flex-1 overflow-y-auto px-6 py-8 sm:px-10 sm:py-10 flex flex-col items-center">
+          <div className="w-full max-w-5xl">
+            <Outlet />
+          </div>
         </main>
       </div>
-    </div>
+    </>
   );
 };
 

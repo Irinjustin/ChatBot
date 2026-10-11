@@ -4,6 +4,8 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
+from google.genai import types
+
 import crud
 import gemini_service
 from database import get_db
@@ -16,8 +18,10 @@ from schemas import (
     ConversationSchema,
     MessageSchema,
 )
-from services.rag_service import build_rag_prompt
-from services.context_service import build_conversation_context
+from services.function_service import (
+    build_search_knowledge_tool,
+    build_tool_executor,
+)
 
 router = APIRouter(tags=["Chat"])
 
@@ -87,7 +91,7 @@ def chat(
             db,
             conversation.id
         )
-        conversation_context = build_conversation_context(messages)
+
         # Set title from first user message
         if len(messages) == 0:
 
@@ -123,27 +127,79 @@ def chat(
 
             try:
 
-                prompt, configuration, _ = build_rag_prompt(
-                    db=db,
-                    admin_id=current_user.id,
-                    conversation_context=conversation_context,
-                    question=data.message,
+                # ── Agent Configuration ──────────────────────────────
+                configuration = crud.get_agent_configuration(
+                    db,
+                    current_user.id
                 )
 
+                if configuration is None:
+                    yield "Agent configuration not found."
+                    return
+
+                # ── Build conversation contents ───────────────────────
+                # Convert stored history to types.Content, then append
+                # the current user message as the final turn.
+                contents = gemini_service.build_contents(messages)
+                contents.append(
+                    types.Content(
+                        role="user",
+                        parts=[types.Part(text=data.message)]
+                    )
+                )
+
+                # ── Conditionally register search_knowledge tool ──────
+                tools = None
+                tool_executor = None
+
+                if configuration.rag_enabled:
+
+                    tools = [build_search_knowledge_tool()]
+                    tool_executor = build_tool_executor(
+                        db=db,
+                        admin_id=current_user.id,
+                        selected_website_ids=configuration.selected_website_ids,
+                    )
+
+                    logger.info(
+                        f"RAG enabled — search_knowledge tool registered "
+                        f"for session {conversation.session_id}"
+                    )
+
+                else:
+
+                    logger.info(
+                        f"RAG disabled — Gemini answers directly "
+                        f"for session {conversation.session_id}"
+                    )
+
+                import time
+                start_time = time.time()
+
+                # ── Generate response ─────────────────────────────────
                 for chunk in gemini_service.generate_response(
-                    user_message=prompt,
+                    user_message=contents,
                     system_prompt=configuration.system_prompt,
                     model_name=configuration.model_name,
+                    temperature=configuration.temperature,
+                    max_tokens=configuration.max_tokens,
+                    tools=tools,
+                    tool_executor=tool_executor,
                 ):
                     if chunk:
                         full_reply += chunk
                         yield chunk
 
+                end_time = time.time()
+                response_time_ms = (end_time - start_time) * 1000.0
+
+                # ── Persist the assistant reply ───────────────────────
                 crud.save_message(
                     db=db,
                     conversation_id=conversation.id,
                     role="model",
-                    content=full_reply
+                    content=full_reply,
+                    response_time_ms=response_time_ms
                 )
 
                 logger.info(

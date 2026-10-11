@@ -15,17 +15,41 @@ export default function ChatWindow({
   if (!isOpen) return null;
 
   return (
-    <div
-      className={`fixed z-50 transition-all duration-300 flex flex-col bg-slate-900 rounded-2xl shadow-2xl border border-slate-800 overflow-hidden
-      /* Responsive Sizing */
-      bottom-0 right-0 w-full h-full sm:bottom-24 sm:right-6 sm:w-[380px] sm:h-[580px] sm:max-h-[80vh]
-      animate-in fade-in slide-in-from-bottom-5`}
-    >
-      <ChatHeader botName={botName} onMinimize={onClose} />
+    <>
+      <style>{`
+        .chat-window {
+          position: fixed;
+          z-index: 49;
+          display: flex;
+          flex-direction: column;
+          background: rgba(16,14,23,0.88);
+          backdrop-filter: blur(24px) saturate(1.4);
+          -webkit-backdrop-filter: blur(24px) saturate(1.4);
+          border: 1px solid rgba(255,255,255,0.09);
+          box-shadow: 0 28px 72px rgba(0,0,0,0.65), 0 1px 0 rgba(255,255,255,0.07) inset;
+          overflow: hidden;
+          animation: chatWindowIn 240ms cubic-bezier(0.34,1.1,0.64,1) both;
+          bottom: 0; right: 0;
+          width: 100%; height: 100%;
+          border-radius: 0;
+        }
+        @media (min-width: 640px) {
+          .chat-window {
+            bottom: 94px;
+            right: 28px;
+            width: 390px;
+            height: 580px;
+            max-height: 80vh;
+            border-radius: 24px;
+          }
+        }
+      `}</style>
 
-      <ChatMessages messages={messages} isTyping={isTyping} error={error} />
-
-      <ChatInput onSendMessage={onSendMessage} disabled={isTyping} />
-    </div>
+      <div className="chat-window">
+        <ChatHeader botName={botName} onMinimize={onClose} />
+        <ChatMessages messages={messages} isTyping={isTyping} error={error} onSendMessage={onSendMessage} />
+        <ChatInput onSendMessage={onSendMessage} disabled={isTyping} />
+      </div>
+    </>
   );
 }

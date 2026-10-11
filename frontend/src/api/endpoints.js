@@ -8,5 +8,9 @@ export const ENDPOINTS = {
     CONFIG: '/agent/config',
     TEST: '/agent/test',
     SYNC: '/agent/sync-website',
+    KNOWLEDGE_BASE: '/agent/knowledge-base',
+  },
+  DASHBOARD: {
+    STATS: '/dashboard/stats',
   }
 };

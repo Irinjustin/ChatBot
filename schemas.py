@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Optional
+from typing import List, Optional
 
 from pydantic import BaseModel, EmailStr, Field
 
@@ -38,6 +38,7 @@ class AdminResponse(BaseModel):
 # ---------- Agent Configuration ----------
 
 class AgentConfigurationCreate(BaseModel):
+    # Deprecated: kept for backward compat, no longer used for RAG
     website_url: Optional[str] = None
 
     system_prompt: str
@@ -52,11 +53,33 @@ class AgentConfigurationCreate(BaseModel):
 
     rag_enabled: bool = True
 
+    # IDs from WebsiteContent table selected as RAG sources
+    selected_website_ids: Optional[List[int]] = None
+
+
 class AgentConfigurationResponse(AgentConfigurationCreate):
     id: int
 
     class Config:
         from_attributes = True
+
+
+# ---------- Knowledge Base ----------
+
+class WebsiteContentResponse(BaseModel):
+    id: int
+    website_url: str
+
+    class Config:
+        from_attributes = True
+
+
+class KnowledgeBaseAddRequest(BaseModel):
+    website_url: str
+
+
+class SyncWebsiteRequest(BaseModel):
+    website_url: str
 
 
 # ---------- Chat ----------
